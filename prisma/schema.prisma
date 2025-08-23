@@ -1,0 +1,413 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  PREMIUM
+}
+
+enum PlanType {
+  FREE
+  PRO
+  ULTIMATE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+  TRIAL
+  EXPIRED
+}
+
+enum BillingPeriod {
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  INVESTMENT
+  LOAN
+  MORTGAGE
+  CRYPTO
+}
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  emailVerified     Boolean    @default(false)
+  emailVerifiedAt   DateTime?
+  firstName         String
+  lastName          String
+  phone             String?
+  dateOfBirth       DateTime?
+  role              UserRole   @default(USER)
+  status            UserStatus @default(PENDING_VERIFICATION)
+  profilePicture    String?
+  
+  // Financial profile
+  monthlyIncome     Decimal?   @db.Decimal(12, 2)
+  currency          String     @default("USD")
+  timezone          String     @default("UTC")
+  
+  // Better Auth required fields
+  name              String?
+  image             String?
+  
+  // Metadata
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  lastLoginAt       DateTime?
+  
+  // Subscription fields
+  currentPlan       PlanType   @default(FREE)
+  subscriptionId    String?    @unique
+  
+  // Relations
+  financialAccounts FinancialAccount[]
+  transactions      Transaction[]
+  categories        Category[]
+  budgets          Budget[]
+  goals            Goal[]
+  auditLogs        AuditLog[]
+  subscription     Subscription?
+  usageTracking    UsageTracking[]
+  
+  // Better Auth Relations
+  accounts          account[]  @relation("UserAccounts")
+  sessions          session[]  @relation("UserSessions")
+  
+  @@map("users")
+}
+
+
+model FinancialAccount {
+  id              String      @id @default(cuid())
+  userId          String
+  name            String
+  type            AccountType
+  institutionName String?
+  accountNumber   String?     // Encrypted
+  routingNumber   String?     // Encrypted
+  balance         Decimal     @default(0) @db.Decimal(12, 2)
+  currency        String      @default("USD")
+  isActive        Boolean     @default(true)
+  
+  // External provider info
+  plaidAccountId  String?
+  plaidItemId     String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  budgets        Budget[]
+  goals          Goal[]
+  
+  @@map("financial_accounts")
+}
+
+model Transaction {
+  id                String    @id @default(cuid())
+  userId            String
+  accountId         String
+  categoryId        String?
+  amount            Decimal   @db.Decimal(12, 2)
+  description       String
+  merchantName      String?
+  date              DateTime
+  pending           Boolean   @default(false)
+  
+  // External provider info
+  plaidTransactionId String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account           FinancialAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  @@map("transactions")
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  userId       String
+  name         String
+  icon         String?
+  color        String?
+  isDefault    Boolean       @default(false)
+  parentId     String?
+  
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent       Category?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryHierarchy")
+  transactions Transaction[]
+  budgets      Budget[]
+  
+  @@map("categories")
+}
+
+model Budget {
+  id          String   @id @default(cuid())
+  userId      String
+  accountId   String?
+  categoryId  String
+  name        String
+  amount      Decimal  @db.Decimal(12, 2)
+  period      String   // WEEKLY, MONTHLY, YEARLY
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  @@map("budgets")
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  userId      String
+  accountId   String?
+  name        String
+  description String?
+  targetAmount Decimal @db.Decimal(12, 2)
+  currentAmount Decimal @default(0) @db.Decimal(12, 2)
+  targetDate  DateTime
+  isAchieved  Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  
+  @@map("goals")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  resource    String
+  resourceId  String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("audit_logs")
+}
+
+model Plan {
+  id                  String      @id @default(cuid())
+  type                PlanType    @unique
+  name                String
+  description         String
+  monthlyPrice        Decimal     @db.Decimal(8, 2)
+  yearlyPrice         Decimal     @db.Decimal(8, 2)
+  isActive            Boolean     @default(true)
+  
+  // Feature limits
+  maxAccounts         Int         @default(1)
+  maxTransactions     Int         @default(100)
+  maxCategories       Int         @default(10)
+  maxBudgets          Int         @default(3)
+  maxGoals            Int         @default(2)
+  aiInsights          Boolean     @default(false)
+  advancedReports     Boolean     @default(false)
+  prioritySupport     Boolean     @default(false)
+  apiAccess           Boolean     @default(false)
+  exportData          Boolean     @default(false)
+  customCategories    Boolean     @default(false)
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  subscriptions       Subscription[]
+  
+  @@map("plans")
+}
+
+model Subscription {
+  id                  String              @id @default(cuid())
+  userId              String              @unique
+  planType            PlanType
+  status              SubscriptionStatus  @default(ACTIVE)
+  billingPeriod       BillingPeriod       @default(MONTHLY)
+  
+  // Pricing
+  amount              Decimal             @db.Decimal(8, 2)
+  currency            String              @default("USD")
+  
+  // Billing dates
+  startDate           DateTime            @default(now())
+  endDate             DateTime?
+  currentPeriodStart  DateTime            @default(now())
+  currentPeriodEnd    DateTime
+  cancelAt            DateTime?
+  canceledAt          DateTime?
+  trialStart          DateTime?
+  trialEnd            DateTime?
+  
+  // Payment info
+  lastPaymentDate     DateTime?
+  stripeCustomerId    String?
+  stripeSubscriptionId String?
+  stripePriceId       String?
+  
+  // Metadata
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                Plan                @relation(fields: [planType], references: [type])
+  payments            Payment[]
+  
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                  String        @id @default(cuid())
+  subscriptionId      String
+  amount              Decimal       @db.Decimal(8, 2)
+  currency            String        @default("USD")
+  status              PaymentStatus @default(PENDING)
+  
+  // Payment details
+  paymentMethodId     String?
+  invoiceId           String?
+  stripePaymentIntentId String?
+  stripeChargeId      String?
+  paymentMethod       String?       // card, bank_transfer, etc.
+  
+  // Billing period this payment covers
+  periodStart         DateTime?
+  periodEnd           DateTime?
+  
+  // Processing details
+  paymentDate         DateTime      @default(now())
+  processedAt         DateTime?
+  failureReason       String?
+  lastPaymentDate     DateTime?
+  
+  // Metadata
+  metadata            Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  subscription        Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  @@map("payments")
+}
+
+model UsageTracking {
+  id                  String      @id @default(cuid())
+  userId              String
+  feature             String
+  action              String
+  timestamp           DateTime    @default(now())
+  metadata            Json?
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("usage_tracking")
+}
+
+// Better Auth Tables using default names
+model account {
+  id              String  @id @default(cuid())
+  accountId       String
+  providerId      String
+  userId          String
+  accessToken     String?
+  refreshToken    String?
+  idToken         String?
+  expiresAt       DateTime?
+  password        String?
+  name            String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User @relation("UserAccounts", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model session {
+  id          String   @id @default(cuid())
+  expiresAt   DateTime
+  ipAddress   String?
+  userAgent   String?
+  userId      String
+  token       String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model verification {
+  id          String   @id @default(cuid())
+  identifier  String
+  value       String
+  expiresAt   DateTime
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Two-factor authentication table for better-auth
+model twoFactor {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  secret      String
+  backupCodes String[] // Array of backup codes
+  enabled     Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

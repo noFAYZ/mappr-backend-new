@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +5,618 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String                    @id @default(cuid())
+  email              String                    @unique
+  emailVerified      Boolean                   @default(false)
+  emailVerifiedAt    DateTime?
+  firstName          String
+  lastName           String
+  phone              String?
+  dateOfBirth        DateTime?
+  role               UserRole                  @default(USER)
+  status             UserStatus                @default(PENDING_VERIFICATION)
+  profilePicture     String?
+  monthlyIncome      Decimal?                  @db.Decimal(12, 2)
+  currency           String                    @default("USD")
+  timezone           String                    @default("UTC")
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  lastLoginAt        DateTime?
+  currentPlan        PlanType                  @default(FREE)
+  subscriptionId     String?                   @unique
+  image              String?
+  name               String?
+  accounts           account[]                 @relation("UserAccounts")
+  auditLogs          AuditLog[]
+  budgets            Budget[]
+  categories         Category[]
+  portfolioSnapshots CryptoPortfolioSnapshot[]
+  cryptoWallets      CryptoWallet[]
+  financialAccounts  FinancialAccount[]
+  goals              Goal[]
+  sessions           session[]                 @relation("UserSessions")
+  subscription       Subscription?
+  transactions       Transaction[]
+  usageTracking      UsageTracking[]
+
+  @@map("users")
+}
+
+model FinancialAccount {
+  id              String        @id @default(cuid())
+  userId          String
+  name            String
+  type            AccountType
+  institutionName String?
+  accountNumber   String?
+  routingNumber   String?
+  balance         Decimal       @default(0) @db.Decimal(12, 2)
+  currency        String        @default("USD")
+  isActive        Boolean       @default(true)
+  plaidAccountId  String?
+  plaidItemId     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  budgets         Budget[]
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goals           Goal[]
+  transactions    Transaction[]
+
+  @@map("financial_accounts")
+}
+
+model Transaction {
+  id                 String           @id @default(cuid())
+  userId             String
+  accountId          String
+  categoryId         String?
+  amount             Decimal          @db.Decimal(12, 2)
+  description        String
+  merchantName       String?
+  date               DateTime
+  pending            Boolean          @default(false)
+  plaidTransactionId String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  account            FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category           Category?        @relation(fields: [categoryId], references: [id])
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  userId       String
+  name         String
+  icon         String?
+  color        String?
+  isDefault    Boolean       @default(false)
+  parentId     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  budgets      Budget[]
+  parent       Category?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryHierarchy")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("categories")
+}
+
+model Budget {
+  id         String            @id @default(cuid())
+  userId     String
+  accountId  String?
+  categoryId String
+  name       String
+  amount     Decimal           @db.Decimal(12, 2)
+  period     String
+  startDate  DateTime
+  endDate    DateTime
+  isActive   Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  account    FinancialAccount? @relation(fields: [accountId], references: [id])
+  category   Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("budgets")
+}
+
+model Goal {
+  id            String            @id @default(cuid())
+  userId        String
+  accountId     String?
+  name          String
+  description   String?
+  targetAmount  Decimal           @db.Decimal(12, 2)
+  currentAmount Decimal           @default(0) @db.Decimal(12, 2)
+  targetDate    DateTime
+  isAchieved    Boolean           @default(false)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  account       FinancialAccount? @relation(fields: [accountId], references: [id])
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("goals")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+model Plan {
+  id               String         @id @default(cuid())
+  type             PlanType       @unique
+  name             String
+  description      String
+  monthlyPrice     Decimal        @db.Decimal(8, 2)
+  yearlyPrice      Decimal        @db.Decimal(8, 2)
+  isActive         Boolean        @default(true)
+  maxAccounts      Int            @default(1)
+  maxTransactions  Int            @default(100)
+  maxCategories    Int            @default(10)
+  maxBudgets       Int            @default(3)
+  maxGoals         Int            @default(2)
+  aiInsights       Boolean        @default(false)
+  advancedReports  Boolean        @default(false)
+  prioritySupport  Boolean        @default(false)
+  apiAccess        Boolean        @default(false)
+  exportData       Boolean        @default(false)
+  customCategories Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  subscriptions    Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  planType             PlanType
+  status               SubscriptionStatus @default(ACTIVE)
+  billingPeriod        BillingPeriod      @default(MONTHLY)
+  amount               Decimal            @db.Decimal(8, 2)
+  currency             String             @default("USD")
+  startDate            DateTime           @default(now())
+  endDate              DateTime?
+  currentPeriodStart   DateTime           @default(now())
+  currentPeriodEnd     DateTime
+  cancelAt             DateTime?
+  canceledAt           DateTime?
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  lastPaymentDate      DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripePriceId        String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  payments             Payment[]
+  plan                 Plan               @relation(fields: [planType], references: [type])
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  subscriptionId        String
+  amount                Decimal       @db.Decimal(8, 2)
+  currency              String        @default("USD")
+  status                PaymentStatus @default(PENDING)
+  paymentMethodId       String?
+  invoiceId             String?
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  paymentMethod         String?
+  periodStart           DateTime?
+  periodEnd             DateTime?
+  paymentDate           DateTime      @default(now())
+  processedAt           DateTime?
+  failureReason         String?
+  lastPaymentDate       DateTime?
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  subscription          Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model UsageTracking {
+  id        String   @id @default(cuid())
+  userId    String
+  feature   String
+  action    String
+  timestamp DateTime @default(now())
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("usage_tracking")
+}
+
+model account {
+  id           String    @id @default(cuid())
+  accountId    String
+  providerId   String
+  userId       String
+  accessToken  String?
+  refreshToken String?
+  idToken      String?
+  expiresAt    DateTime?
+  password     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  name         String?
+  user         User      @relation("UserAccounts", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model twoFactor {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  secret      String
+  backupCodes String[]
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CryptoWallet {
+  id              String                    @id @default(cuid())
+  userId          String
+  name            String
+  address         String
+  type            WalletType
+  network         BlockchainNetwork
+  isActive        Boolean                   @default(true)
+  isWatching      Boolean                   @default(true)
+  label           String?
+  notes           String?
+  tags            String[]
+  lastSyncAt      DateTime?
+  syncStatus      String?
+  syncError       String?
+  totalBalance    Decimal                   @default(0) @db.Decimal(18, 8)
+  totalBalanceUsd Decimal                   @default(0) @db.Decimal(12, 2)
+  assetCount      Int                       @default(0)
+  nftCount        Int                       @default(0)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  crypto_assets   crypto_assets[]
+  nfts            CryptoNFT[]
+  snapshots       CryptoPortfolioSnapshot[]
+  portfolio       CryptoPortfolio?
+  positions       CryptoPosition[]
+  transactions    CryptoTransaction[]
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defiPositions   DeFiPosition[]
+
+  @@unique([userId, address, network])
+  @@index([userId])
+  @@index([address])
+  @@index([network])
+  @@map("crypto_wallets")
+}
+
+model CryptoPosition {
+  id               String        @id @default(cuid())
+  walletId         String
+  assetId          String?
+  balance          Decimal       @db.Decimal(28, 18)
+  balanceFormatted String
+  balanceUsd       Decimal       @db.Decimal(12, 2)
+  avgCostPrice     Decimal?      @db.Decimal(18, 8)
+  totalCostBasis   Decimal?      @db.Decimal(12, 2)
+  unrealizedPnl    Decimal?      @db.Decimal(12, 2)
+  unrealizedPnlPct Decimal?      @db.Decimal(8, 4)
+  dayChange        Decimal?      @db.Decimal(12, 2)
+  dayChangePct     Decimal?      @db.Decimal(8, 4)
+  isStaked         Boolean       @default(false)
+  stakingRewards   Decimal?      @db.Decimal(12, 2)
+  lastUpdated      DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  asset            CryptoAssetRegistry? @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  wallet           CryptoWallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([balanceUsd])
+  @@map("crypto_positions")
+}
+
+model CryptoTransaction {
+  id                   String            @id @default(cuid())
+  walletId             String
+  hash                 String
+  blockNumber          BigInt?
+  transactionIndex     Int?
+  network              BlockchainNetwork
+  type                 TransactionType
+  status               TransactionStatus
+  timestamp            DateTime
+  fromAddress          String
+  toAddress            String
+  value                Decimal           @db.Decimal(28, 18)
+  valueFormatted       String
+  valueUsd             Decimal?          @db.Decimal(12, 2)
+  gasUsed              BigInt?
+  gasPrice             Decimal?          @db.Decimal(18, 8)
+  gasCost              Decimal?          @db.Decimal(18, 8)
+  gasCostUsd           Decimal?          @db.Decimal(12, 2)
+  assetId              String?
+  assetSymbol          String
+  assetContractAddress String?
+  methodId             String?
+  inputData            String?
+  logs                 Json?
+  internalTxs          Json?
+  parentTxHash         String?
+  relatedTxHashes      String[]
+  category             String?
+  tags                 String[]
+  notes                String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  asset                CryptoAssetRegistry? @relation("AssetTransactions", fields: [assetId], references: [id])
+  wallet               CryptoWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([hash, network])
+  @@index([walletId])
+  @@index([fromAddress])
+  @@index([toAddress])
+  @@index([timestamp])
+  @@index([type])
+  @@index([status])
+  @@map("crypto_transactions")
+}
+
+model CryptoNFT {
+  id               String            @id @default(cuid())
+  walletId         String
+  contractAddress  String
+  tokenId          String
+  standard         NFTStandard
+  network          BlockchainNetwork
+  name             String?
+  description      String?
+  imageUrl         String?
+  animationUrl     String?
+  externalUrl      String?
+  attributes       Json?
+  collectionName   String?
+  collectionSymbol String?
+  collectionSlug   String?
+  ownerAddress     String
+  quantity         BigInt            @default(1)
+  transferredAt    DateTime?
+  lastSalePrice    Decimal?          @db.Decimal(18, 8)
+  lastSalePriceUsd Decimal?          @db.Decimal(12, 2)
+  floorPrice       Decimal?          @db.Decimal(18, 8)
+  floorPriceUsd    Decimal?          @db.Decimal(12, 2)
+  estimatedValue   Decimal?          @db.Decimal(12, 2)
+  isSpam           Boolean           @default(false)
+  isNsfw           Boolean           @default(false)
+  rarity           String?
+  rarityRank       Int?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  wallet           CryptoWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, contractAddress, tokenId, network])
+  @@index([walletId])
+  @@index([contractAddress])
+  @@index([collectionSlug])
+  @@map("crypto_nfts")
+}
+
+model DeFiPosition {
+  id              String            @id @default(cuid())
+  walletId        String
+  protocolName    String
+  protocolType    String
+  contractAddress String
+  network         BlockchainNetwork
+  positionType    String
+  poolName        String?
+  totalValueUsd   Decimal           @db.Decimal(12, 2)
+  principalUsd    Decimal?          @db.Decimal(12, 2)
+  yieldEarned     Decimal?          @db.Decimal(12, 2)
+  yieldEarnedUsd  Decimal?          @db.Decimal(12, 2)
+  apr             Decimal?          @db.Decimal(8, 4)
+  apy             Decimal?          @db.Decimal(8, 4)
+  dailyYield      Decimal?          @db.Decimal(12, 2)
+  totalReturn     Decimal?          @db.Decimal(12, 2)
+  totalReturnPct  Decimal?          @db.Decimal(8, 4)
+  assets          Json?
+  isActive        Boolean           @default(true)
+  canWithdraw     Boolean           @default(true)
+  lockupEnd       DateTime?
+  positionData    Json?
+  lastYieldClaim  DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  wallet          CryptoWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([protocolName])
+  @@index([positionType])
+  @@map("defi_positions")
+}
+
+model CryptoPortfolio {
+  id                  String       @id @default(cuid())
+  walletId            String       @unique
+  totalPositionsValue Decimal      @db.Decimal(12, 2)
+  walletValue         Decimal      @default(0) @db.Decimal(12, 2)
+  depositedValue      Decimal      @default(0) @db.Decimal(12, 2)
+  borrowedValue       Decimal      @default(0) @db.Decimal(12, 2)
+  lockedValue         Decimal      @default(0) @db.Decimal(12, 2)
+  stakedValue         Decimal      @default(0) @db.Decimal(12, 2)
+  arbitrumValue       Decimal      @default(0) @db.Decimal(12, 2)
+  avalancheValue      Decimal      @default(0) @db.Decimal(12, 2)
+  baseValue           Decimal      @default(0) @db.Decimal(12, 2)
+  bscValue            Decimal      @default(0) @db.Decimal(12, 2)
+  celoValue           Decimal      @default(0) @db.Decimal(12, 2)
+  ethereumValue       Decimal      @default(0) @db.Decimal(12, 2)
+  fantomValue         Decimal      @default(0) @db.Decimal(12, 2)
+  lineaValue          Decimal      @default(0) @db.Decimal(12, 2)
+  polygonValue        Decimal      @default(0) @db.Decimal(12, 2)
+  absolute24hChange   Decimal?     @db.Decimal(12, 2)
+  percent24hChange    Decimal?     @db.Decimal(8, 4)
+  rawZerionData       Json?
+  lastSyncAt          DateTime     @default(now())
+  dataFreshness       String?
+  syncSource          String       @default("zerion")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  wallet              CryptoWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([lastSyncAt])
+  @@index([totalPositionsValue])
+  @@map("crypto_portfolios")
+}
+
+model CryptoPortfolioSnapshot {
+  id                    String        @id @default(cuid())
+  userId                String
+  walletId              String?
+  totalValueUsd         Decimal       @db.Decimal(12, 2)
+  totalAssets           Int
+  totalNfts             Int
+  totalDeFiValue        Decimal       @db.Decimal(12, 2)
+  dayChange             Decimal?      @db.Decimal(12, 2)
+  dayChangePct          Decimal?      @db.Decimal(8, 4)
+  weekChange            Decimal?      @db.Decimal(12, 2)
+  weekChangePct         Decimal?      @db.Decimal(8, 4)
+  monthChange           Decimal?      @db.Decimal(12, 2)
+  monthChangePct        Decimal?      @db.Decimal(8, 4)
+  topAssets             Json
+  networkDistribution   Json
+  assetTypeDistribution Json
+  snapshotDate          DateTime      @default(now())
+  createdAt             DateTime      @default(now())
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet                CryptoWallet? @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([walletId])
+  @@index([snapshotDate])
+  @@map("crypto_portfolio_snapshots")
+}
+
+// Global Crypto Asset Registry (deduplicated assets)
+model CryptoAssetRegistry {
+  id              String           @id @default(cuid())
+  
+  // Asset identification  
+  symbol          String           // ETH, BTC, USDC
+  name            String           // Ethereum, Bitcoin, USD Coin
+  contractAddress String?          // For tokens, null for native coins
+  decimals        Int              @default(18)
+  type            AssetType
+  network         BlockchainNetwork
+  
+  // Asset metadata
+  logoUrl         String?
+  websiteUrl      String?
+  description     String?
+  isVerified      Boolean          @default(false)
+  
+  // Market data (from Zerion)
+  price           Decimal?         @db.Decimal(18, 8)
+  priceUsd        Decimal?         @db.Decimal(12, 2)
+  marketCap       Decimal?         @db.Decimal(15, 2)
+  volume24h       Decimal?         @db.Decimal(15, 2)
+  change24h       Decimal?         @db.Decimal(8, 4) // Percentage
+  
+  // Update tracking
+  lastPriceUpdate DateTime?
+  priceUpdateCount Int             @default(0)
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  // Relations
+  positions       CryptoPosition[]
+  transactions    CryptoTransaction[] @relation("AssetTransactions")
+  
+  @@unique([contractAddress, network])
+  @@unique([symbol, network, contractAddress])
+  @@index([symbol])
+  @@index([network])
+  @@index([lastPriceUpdate])
+  @@map("crypto_asset_registry")
+}
+
+// Temporary - keep old table during migration
+model crypto_assets {
+  id              String              @id
+  walletId        String
+  symbol          String
+  name            String
+  contractAddress String?
+  decimals        Int                 @default(18)
+  type            AssetType
+  network         BlockchainNetwork
+  logoUrl         String?
+  websiteUrl      String?
+  description     String?
+  isVerified      Boolean             @default(false)
+  price           Decimal?            @db.Decimal(18, 8)
+  priceUsd        Decimal?            @db.Decimal(12, 2)
+  marketCap       Decimal?            @db.Decimal(15, 2)
+  volume24h       Decimal?            @db.Decimal(15, 2)
+  change24h       Decimal?            @db.Decimal(8, 4)
+  lastPriceUpdate DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime
+  crypto_wallets  CryptoWallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, contractAddress, network])
+  @@unique([walletId, symbol, network, contractAddress])
+  @@index([network])
+  @@index([symbol])
 }
 
 enum UserRole {
@@ -59,373 +668,12 @@ enum AccountType {
   CRYPTO
 }
 
-model User {
-  id                String     @id @default(cuid())
-  email             String     @unique
-  emailVerified     Boolean    @default(false)
-  emailVerifiedAt   DateTime?
-  firstName         String
-  lastName          String
-  phone             String?
-  dateOfBirth       DateTime?
-  role              UserRole   @default(USER)
-  status            UserStatus @default(PENDING_VERIFICATION)
-  profilePicture    String?
-  
-  // Financial profile
-  monthlyIncome     Decimal?   @db.Decimal(12, 2)
-  currency          String     @default("USD")
-  timezone          String     @default("UTC")
-  
-  // Better Auth required fields
-  name              String?
-  image             String?
-  
-  // Metadata
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  lastLoginAt       DateTime?
-  
-  // Subscription fields
-  currentPlan       PlanType   @default(FREE)
-  subscriptionId    String?    @unique
-  
-  // Relations
-  financialAccounts FinancialAccount[]
-  transactions      Transaction[]
-  categories        Category[]
-  budgets          Budget[]
-  goals            Goal[]
-  auditLogs        AuditLog[]
-  subscription     Subscription?
-  usageTracking    UsageTracking[]
-  
-  // Better Auth Relations
-  accounts          account[]  @relation("UserAccounts")
-  sessions          session[]  @relation("UserSessions")
-  
-  // Crypto Relations
-  cryptoWallets     CryptoWallet[]
-  portfolioSnapshots CryptoPortfolioSnapshot[]
-  
-  @@map("users")
-}
-
-
-model FinancialAccount {
-  id              String      @id @default(cuid())
-  userId          String
-  name            String
-  type            AccountType
-  institutionName String?
-  accountNumber   String?     // Encrypted
-  routingNumber   String?     // Encrypted
-  balance         Decimal     @default(0) @db.Decimal(12, 2)
-  currency        String      @default("USD")
-  isActive        Boolean     @default(true)
-  
-  // External provider info
-  plaidAccountId  String?
-  plaidItemId     String?
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions   Transaction[]
-  budgets        Budget[]
-  goals          Goal[]
-  
-  @@map("financial_accounts")
-}
-
-model Transaction {
-  id                String    @id @default(cuid())
-  userId            String
-  accountId         String
-  categoryId        String?
-  amount            Decimal   @db.Decimal(12, 2)
-  description       String
-  merchantName      String?
-  date              DateTime
-  pending           Boolean   @default(false)
-  
-  // External provider info
-  plaidTransactionId String?
-  
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account           FinancialAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  
-  @@map("transactions")
-}
-
-model Category {
-  id           String        @id @default(cuid())
-  userId       String
-  name         String
-  icon         String?
-  color        String?
-  isDefault    Boolean       @default(false)
-  parentId     String?
-  
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent       Category?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children     Category[]    @relation("CategoryHierarchy")
-  transactions Transaction[]
-  budgets      Budget[]
-  
-  @@map("categories")
-}
-
-model Budget {
-  id          String   @id @default(cuid())
-  userId      String
-  accountId   String?
-  categoryId  String
-  name        String
-  amount      Decimal  @db.Decimal(12, 2)
-  period      String   // WEEKLY, MONTHLY, YEARLY
-  startDate   DateTime
-  endDate     DateTime
-  isActive    Boolean  @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
-  @@map("budgets")
-}
-
-model Goal {
-  id          String   @id @default(cuid())
-  userId      String
-  accountId   String?
-  name        String
-  description String?
-  targetAmount Decimal @db.Decimal(12, 2)
-  currentAmount Decimal @default(0) @db.Decimal(12, 2)
-  targetDate  DateTime
-  isAchieved  Boolean  @default(false)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  
-  @@map("goals")
-}
-
-model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String
-  action      String
-  resource    String
-  resourceId  String?
-  details     Json?
-  ipAddress   String?
-  userAgent   String?
-  
-  createdAt   DateTime @default(now())
-  
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@map("audit_logs")
-}
-
-model Plan {
-  id                  String      @id @default(cuid())
-  type                PlanType    @unique
-  name                String
-  description         String
-  monthlyPrice        Decimal     @db.Decimal(8, 2)
-  yearlyPrice         Decimal     @db.Decimal(8, 2)
-  isActive            Boolean     @default(true)
-  
-  // Feature limits
-  maxAccounts         Int         @default(1)
-  maxTransactions     Int         @default(100)
-  maxCategories       Int         @default(10)
-  maxBudgets          Int         @default(3)
-  maxGoals            Int         @default(2)
-  aiInsights          Boolean     @default(false)
-  advancedReports     Boolean     @default(false)
-  prioritySupport     Boolean     @default(false)
-  apiAccess           Boolean     @default(false)
-  exportData          Boolean     @default(false)
-  customCategories    Boolean     @default(false)
-  
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-  
-  subscriptions       Subscription[]
-  
-  @@map("plans")
-}
-
-model Subscription {
-  id                  String              @id @default(cuid())
-  userId              String              @unique
-  planType            PlanType
-  status              SubscriptionStatus  @default(ACTIVE)
-  billingPeriod       BillingPeriod       @default(MONTHLY)
-  
-  // Pricing
-  amount              Decimal             @db.Decimal(8, 2)
-  currency            String              @default("USD")
-  
-  // Billing dates
-  startDate           DateTime            @default(now())
-  endDate             DateTime?
-  currentPeriodStart  DateTime            @default(now())
-  currentPeriodEnd    DateTime
-  cancelAt            DateTime?
-  canceledAt          DateTime?
-  trialStart          DateTime?
-  trialEnd            DateTime?
-  
-  // Payment info
-  lastPaymentDate     DateTime?
-  stripeCustomerId    String?
-  stripeSubscriptionId String?
-  stripePriceId       String?
-  
-  // Metadata
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  
-  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan                Plan                @relation(fields: [planType], references: [type])
-  payments            Payment[]
-  
-  @@map("subscriptions")
-}
-
-model Payment {
-  id                  String        @id @default(cuid())
-  subscriptionId      String
-  amount              Decimal       @db.Decimal(8, 2)
-  currency            String        @default("USD")
-  status              PaymentStatus @default(PENDING)
-  
-  // Payment details
-  paymentMethodId     String?
-  invoiceId           String?
-  stripePaymentIntentId String?
-  stripeChargeId      String?
-  paymentMethod       String?       // card, bank_transfer, etc.
-  
-  // Billing period this payment covers
-  periodStart         DateTime?
-  periodEnd           DateTime?
-  
-  // Processing details
-  paymentDate         DateTime      @default(now())
-  processedAt         DateTime?
-  failureReason       String?
-  lastPaymentDate     DateTime?
-  
-  // Metadata
-  metadata            Json?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  
-  subscription        Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  
-  @@map("payments")
-}
-
-model UsageTracking {
-  id                  String      @id @default(cuid())
-  userId              String
-  feature             String
-  action              String
-  timestamp           DateTime    @default(now())
-  metadata            Json?
-  
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-  
-  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@map("usage_tracking")
-}
-
-// Better Auth Tables using default names
-model account {
-  id              String  @id @default(cuid())
-  accountId       String
-  providerId      String
-  userId          String
-  accessToken     String?
-  refreshToken    String?
-  idToken         String?
-  expiresAt       DateTime?
-  password        String?
-  name            String?
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user            User @relation("UserAccounts", fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model session {
-  id          String   @id @default(cuid())
-  expiresAt   DateTime
-  ipAddress   String?
-  userAgent   String?
-  userId      String
-  token       String
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  user        User @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model verification {
-  id          String   @id @default(cuid())
-  identifier  String
-  value       String
-  expiresAt   DateTime
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-// Two-factor authentication table for better-auth
-model twoFactor {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  secret      String
-  backupCodes String[] // Array of backup codes
-  enabled     Boolean  @default(false)
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-// ====================================
-// CRYPTO PORTFOLIO MANAGEMENT TABLES
-// ====================================
-
 enum WalletType {
-  HOT_WALLET          // MetaMask, Trust Wallet, etc.
-  COLD_WALLET         // Hardware wallets
-  EXCHANGE            // Exchange wallets
-  MULTI_SIG           // Multi-signature wallets
-  SMART_CONTRACT      // Contract-based wallets
+  HOT_WALLET
+  COLD_WALLET
+  EXCHANGE
+  MULTI_SIG
+  SMART_CONTRACT
 }
 
 enum BlockchainNetwork {
@@ -448,12 +696,12 @@ enum BlockchainNetwork {
 }
 
 enum AssetType {
-  TOKEN               // ERC-20, BEP-20, etc.
-  COIN               // Native coins (ETH, BTC, SOL)
-  LP_TOKEN           // Liquidity provider tokens
-  STAKED_TOKEN       // Staked versions of tokens
-  YIELD_TOKEN        // Yield farming tokens
-  GOVERNANCE_TOKEN   // DAO governance tokens
+  TOKEN
+  COIN
+  LP_TOKEN
+  STAKED_TOKEN
+  YIELD_TOKEN
+  GOVERNANCE_TOKEN
 }
 
 enum TransactionType {
@@ -488,346 +736,3 @@ enum NFTStandard {
   SOLANA_NFT
   BTC_ORDINALS
 }
-
-// Main Crypto Wallet Model
-model CryptoWallet {
-  id              String           @id @default(cuid())
-  userId          String
-  name            String           // User-defined name
-  address         String           // Wallet address
-  type            WalletType
-  network         BlockchainNetwork
-  isActive        Boolean          @default(true)
-  isWatching      Boolean          @default(true) // For portfolio tracking
-  
-  // Metadata
-  label           String?          // Custom label from user
-  notes           String?          // User notes
-  tags            String[]         // User-defined tags
-  
-  // Last sync info
-  lastSyncAt      DateTime?
-  syncStatus      String?          // SUCCESS, ERROR, SYNCING
-  syncError       String?
-  
-  // Portfolio summary (cached from Zerion)
-  totalBalance    Decimal          @default(0) @db.Decimal(18, 8)
-  totalBalanceUsd Decimal          @default(0) @db.Decimal(12, 2)
-  assetCount      Int              @default(0)
-  nftCount        Int              @default(0)
-  
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  
-  // Relations
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assets          CryptoAsset[]
-  positions       CryptoPosition[]
-  transactions    CryptoTransaction[]
-  nfts            CryptoNFT[]
-  defiPositions   DeFiPosition[]
-  snapshots       CryptoPortfolioSnapshot[]
-  
-  @@unique([userId, address, network])
-  @@index([userId])
-  @@index([address])
-  @@index([network])
-  @@map("crypto_wallets")
-}
-
-// Crypto Assets (tokens, coins)
-model CryptoAsset {
-  id              String           @id @default(cuid())
-  walletId        String
-  
-  // Asset identification
-  symbol          String           // ETH, BTC, USDC
-  name            String           // Ethereum, Bitcoin, USD Coin
-  contractAddress String?          // For tokens, null for native coins
-  decimals        Int              @default(18)
-  type            AssetType
-  network         BlockchainNetwork
-  
-  // Asset metadata
-  logoUrl         String?
-  websiteUrl      String?
-  description     String?
-  isVerified      Boolean          @default(false)
-  
-  // Market data (from Zerion)
-  price           Decimal?         @db.Decimal(18, 8)
-  priceUsd        Decimal?         @db.Decimal(12, 2)
-  marketCap       Decimal?         @db.Decimal(15, 2)
-  volume24h       Decimal?         @db.Decimal(15, 2)
-  change24h       Decimal?         @db.Decimal(8, 4) // Percentage
-  
-  // Last update
-  lastPriceUpdate DateTime?
-  
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  
-  // Relations
-  wallet          CryptoWallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  positions       CryptoPosition[]
-  transactions    CryptoTransaction[] @relation("AssetTransactions")
-  
-  @@unique([walletId, contractAddress, network])
-  @@unique([walletId, symbol, network, contractAddress])
-  @@index([symbol])
-  @@index([network])
-  @@map("crypto_assets")
-}
-
-// User's positions in crypto assets
-model CryptoPosition {
-  id                String           @id @default(cuid())
-  walletId          String
-  assetId           String
-  
-  // Position data
-  balance           Decimal          @db.Decimal(28, 18) // Raw balance
-  balanceFormatted  String           // Human readable balance
-  balanceUsd        Decimal          @db.Decimal(12, 2)
-  
-  // Cost basis and P&L
-  avgCostPrice      Decimal?         @db.Decimal(18, 8)
-  totalCostBasis    Decimal?         @db.Decimal(12, 2)
-  unrealizedPnl     Decimal?         @db.Decimal(12, 2)
-  unrealizedPnlPct  Decimal?         @db.Decimal(8, 4)
-  
-  // Performance metrics
-  dayChange         Decimal?         @db.Decimal(12, 2)
-  dayChangePct      Decimal?         @db.Decimal(8, 4)
-  
-  // Position metadata
-  isStaked          Boolean          @default(false)
-  stakingRewards    Decimal?         @db.Decimal(12, 2)
-  
-  lastUpdated       DateTime         @default(now())
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  
-  // Relations
-  wallet            CryptoWallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  asset             CryptoAsset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  
-  @@unique([walletId, assetId])
-  @@index([walletId])
-  @@index([balanceUsd])
-  @@map("crypto_positions")
-}
-
-// Crypto Transactions
-model CryptoTransaction {
-  id                String               @id @default(cuid())
-  walletId          String
-  
-  // Transaction identification
-  hash              String
-  blockNumber       BigInt?
-  transactionIndex  Int?
-  network           BlockchainNetwork
-  
-  // Transaction details
-  type              TransactionType
-  status            TransactionStatus
-  timestamp         DateTime
-  
-  // Addresses
-  fromAddress       String
-  toAddress         String
-  
-  // Transaction data
-  value             Decimal              @db.Decimal(28, 18) // Raw value
-  valueFormatted    String               // Human readable value
-  valueUsd          Decimal?             @db.Decimal(12, 2)
-  
-  // Gas information
-  gasUsed           BigInt?
-  gasPrice          Decimal?             @db.Decimal(18, 8)
-  gasCost           Decimal?             @db.Decimal(18, 8)
-  gasCostUsd        Decimal?             @db.Decimal(12, 2)
-  
-  // Asset information
-  assetId           String?
-  assetSymbol       String
-  assetContractAddress String?
-  
-  // Metadata
-  methodId          String?              // Contract method
-  inputData         String?              // Transaction input
-  logs              Json?                // Event logs
-  internalTxs       Json?                // Internal transactions
-  
-  // Related transactions (for complex operations)
-  parentTxHash      String?
-  relatedTxHashes   String[]
-  
-  // Categorization
-  category          String?              // DeFi, NFT, Gaming, etc.
-  tags              String[]
-  notes             String?
-  
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  
-  // Relations
-  wallet            CryptoWallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  asset             CryptoAsset?         @relation("AssetTransactions", fields: [assetId], references: [id], onDelete: SetNull)
-  
-  @@unique([hash, network])
-  @@index([walletId])
-  @@index([fromAddress])
-  @@index([toAddress])
-  @@index([timestamp])
-  @@index([type])
-  @@index([status])
-  @@map("crypto_transactions")
-}
-
-// NFT Holdings
-model CryptoNFT {
-  id                String           @id @default(cuid())
-  walletId          String
-  
-  // NFT identification
-  contractAddress   String
-  tokenId           String
-  standard          NFTStandard
-  network           BlockchainNetwork
-  
-  // NFT metadata
-  name              String?
-  description       String?
-  imageUrl          String?
-  animationUrl      String?
-  externalUrl       String?
-  attributes        Json?            // NFT traits/attributes
-  
-  // Collection info
-  collectionName    String?
-  collectionSymbol  String?
-  collectionSlug    String?
-  
-  // Ownership and transfer
-  ownerAddress      String
-  quantity          BigInt           @default(1) // For ERC1155
-  transferredAt     DateTime?
-  
-  // Valuation
-  lastSalePrice     Decimal?         @db.Decimal(18, 8)
-  lastSalePriceUsd  Decimal?         @db.Decimal(12, 2)
-  floorPrice        Decimal?         @db.Decimal(18, 8)
-  floorPriceUsd     Decimal?         @db.Decimal(12, 2)
-  estimatedValue    Decimal?         @db.Decimal(12, 2)
-  
-  // Metadata
-  isSpam            Boolean          @default(false)
-  isNsfw            Boolean          @default(false)
-  rarity            String?          // Rare, Epic, Legendary, etc.
-  rarityRank        Int?
-  
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  
-  // Relations
-  wallet            CryptoWallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  
-  @@unique([walletId, contractAddress, tokenId, network])
-  @@index([walletId])
-  @@index([contractAddress])
-  @@index([collectionSlug])
-  @@map("crypto_nfts")
-}
-
-// DeFi Positions (Staking, LP, Lending, etc.)
-model DeFiPosition {
-  id                String           @id @default(cuid())
-  walletId          String
-  
-  // Protocol information
-  protocolName      String           // Uniswap, Aave, Compound
-  protocolType      String           // DEX, Lending, Staking, Yield
-  contractAddress   String
-  network           BlockchainNetwork
-  
-  // Position details
-  positionType      String           // LP, Stake, Lend, Borrow
-  poolName          String?          // ETH/USDC LP, etc.
-  
-  // Financial data
-  totalValueUsd     Decimal          @db.Decimal(12, 2)
-  principalUsd      Decimal?         @db.Decimal(12, 2)
-  yieldEarned       Decimal?         @db.Decimal(12, 2)
-  yieldEarnedUsd    Decimal?         @db.Decimal(12, 2)
-  
-  // Performance
-  apr               Decimal?         @db.Decimal(8, 4) // Annual Percentage Rate
-  apy               Decimal?         @db.Decimal(8, 4) // Annual Percentage Yield
-  dailyYield        Decimal?         @db.Decimal(12, 2)
-  totalReturn       Decimal?         @db.Decimal(12, 2)
-  totalReturnPct    Decimal?         @db.Decimal(8, 4)
-  
-  // Position composition (for LP tokens)
-  assets            Json?            // Array of assets in the position
-  
-  // Status
-  isActive          Boolean          @default(true)
-  canWithdraw       Boolean          @default(true)
-  lockupEnd         DateTime?
-  
-  // Metadata
-  positionData      Json?            // Protocol-specific data
-  lastYieldClaim    DateTime?
-  
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  
-  // Relations
-  wallet            CryptoWallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  
-  @@index([walletId])
-  @@index([protocolName])
-  @@index([positionType])
-  @@map("defi_positions")
-}
-
-// Portfolio Snapshots for historical tracking
-model CryptoPortfolioSnapshot {
-  id                String           @id @default(cuid())
-  userId            String
-  walletId          String?          // null for aggregated portfolio
-  
-  // Snapshot data
-  totalValueUsd     Decimal          @db.Decimal(12, 2)
-  totalAssets       Int
-  totalNfts         Int
-  totalDeFiValue    Decimal          @db.Decimal(12, 2)
-  
-  // Performance metrics
-  dayChange         Decimal?         @db.Decimal(12, 2)
-  dayChangePct      Decimal?         @db.Decimal(8, 4)
-  weekChange        Decimal?         @db.Decimal(12, 2)
-  weekChangePct     Decimal?         @db.Decimal(8, 4)
-  monthChange       Decimal?         @db.Decimal(12, 2)
-  monthChangePct    Decimal?         @db.Decimal(8, 4)
-  
-  // Asset allocation
-  topAssets         Json             // Top 10 assets by value
-  networkDistribution Json           // Value by network
-  assetTypeDistribution Json         // Value by asset type
-  
-  snapshotDate      DateTime         @default(now())
-  createdAt         DateTime         @default(now())
-  
-  // Relations
-  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  wallet            CryptoWallet?    @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  
-  @@index([userId])
-  @@index([walletId])
-  @@index([snapshotDate])
-  @@map("crypto_portfolio_snapshots")
-}
-

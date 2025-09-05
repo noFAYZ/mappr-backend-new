@@ -1,16 +1,16 @@
 import winston from 'winston';
 
-const { combine, timestamp, errors, json, colorize, printf } = winston.format;
+const { combine, errors, json, colorize, printf } = winston.format;
 
 // Custom format for console output
-const consoleFormat = printf(({ level, message, timestamp: ts, stack }) => {
-  return `${ts} [${level}]: ${stack || message}`;
+const consoleFormat = printf(({ level, message, stack }) => {
+  return `[${level}]: ${stack || message}`;
 });
 
 // Create logger instance
 export const logger = winston.createLogger({
   level: process.env['LOG_LEVEL'] || 'info',
-  format: combine(timestamp(), errors({ stack: true }), json()),
+  format: combine(errors({ stack: true }), json()),
   defaultMeta: { service: 'mappr-backend' },
   transports: [
     // Write all logs with importance level of 'error' or less to 'error.log'
@@ -33,7 +33,7 @@ export const logger = winston.createLogger({
 if (process.env['NODE_ENV'] !== 'production') {
   logger.add(
     new winston.transports.Console({
-      format: combine(colorize(), timestamp(), consoleFormat),
+      format: combine(colorize(),  consoleFormat),
     })
   );
 }

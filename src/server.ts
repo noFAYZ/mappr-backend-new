@@ -2,12 +2,17 @@ import app from './app';
 import { config } from '@/config/environment';
 import { logger } from '@/utils/logger';
 import { connectDatabase } from '@/config/database';
+import { initializeWorkers, shutdownWorkers } from '@/workers';
 
 async function startServer() {
   try {
     // Connect to database
     await connectDatabase();
     logger.info('Database connected successfully');
+
+    // Initialize background workers
+    await initializeWorkers();
+    logger.info('Background workers initialized');
 
     // Start server
     const server = app.listen(config.port, () => {
@@ -16,20 +21,34 @@ async function startServer() {
     });
 
     // Graceful shutdown
-    process.on('SIGTERM', () => {
+    process.on('SIGTERM', async () => {
       logger.info('SIGTERM signal received: closing HTTP server');
-      server.close(() => {
-        logger.info('HTTP server closed');
-        process.exit(0);
-      });
+      
+      try {
+        await shutdownWorkers();
+        server.close(() => {
+          logger.info('HTTP server closed');
+          process.exit(0);
+        });
+      } catch (error) {
+        logger.error('Error during graceful shutdown:', error);
+        process.exit(1);
+      }
     });
 
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
       logger.info('SIGINT signal received: closing HTTP server');
-      server.close(() => {
-        logger.info('HTTP server closed');
-        process.exit(0);
-      });
+      
+      try {
+        await shutdownWorkers();
+        server.close(() => {
+          logger.info('HTTP server closed');
+          process.exit(0);
+        });
+      } catch (error) {
+        logger.error('Error during graceful shutdown:', error);
+        process.exit(1);
+      }
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

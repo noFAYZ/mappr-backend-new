@@ -13,7 +13,6 @@ import { notFoundHandler } from '@/middleware/notFoundHandler';
 import { swaggerSpec } from '@/config/swagger';
 import authRoutes from '@/routes/auth';
 import apiRoutes from '@/routes/api';
-// import userRoutes from '@/routes/user'; // Commented out - replaced by better-auth API routes
 import subscriptionRoutes from '@/routes/subscription';
 import paymentRoutes from '@/routes/payment';
 import usageRoutes from '@/routes/usage';
@@ -156,7 +155,6 @@ app.use('/', authRoutes);
 
 // API routes with authentication
 app.use(`/api/${config.apiVersion}`, apiRoutes);
-// app.use(`/api/${config.apiVersion}/users`, userRoutes); // Commented out - replaced by better-auth API routes
 app.use(`/api/${config.apiVersion}/subscriptions`, subscriptionRoutes);
 app.use(`/api/${config.apiVersion}/payments`, paymentRoutes);
 app.use(`/api/${config.apiVersion}/usage`, usageRoutes);

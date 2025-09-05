@@ -280,10 +280,10 @@ export const GetWalletAssetsQuerySchema = z.object({
 
 export const SyncWalletSchema = z.object({
   fullSync: z.coerce.boolean().default(false),
-  syncTypes: z.array(z.enum(['assets', 'transactions', 'nfts', 'defi']))
-    .min(1, 'At least one sync type must be specified')
-    .default(['assets', 'transactions', 'nfts', 'defi']),
-  
+  syncAssets: z.coerce.boolean().default(true),
+  syncTransactions: z.coerce.boolean().default(true),
+  syncNFTs: z.coerce.boolean().default(false),
+  syncDeFi: z.coerce.boolean().default(false),
   forceRefresh: z.coerce.boolean().default(false)
 });
 

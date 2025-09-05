@@ -1,6 +1,178 @@
 import { WalletType, BlockchainNetwork, AssetType, TransactionType, TransactionStatus, NFTStandard } from '@prisma/client';
 
 // ===============================
+// ZERION TRANSACTION DATA TYPES
+// ===============================
+
+export interface FungibleInfo {
+  name?: string;
+  symbol?: string;
+  description?: string | null;
+  icon?: {
+    url: string | null;
+  };
+  flags?: {
+    verified: boolean;
+  };
+  implementations?: Array<{
+    chain_id: string;
+    address?: string;
+    decimals: number;
+  }>;
+}
+
+export interface Quantity {
+  int: string;
+  decimals: number;
+  float: number;
+  numeric: string;
+}
+
+export interface Fee {
+  fungible_info?: FungibleInfo;
+  quantity?: Quantity;
+  price: number;
+  value: number;
+}
+
+export interface NftContentItem {
+  url: string;
+  content_type?: string;
+}
+
+export interface NftContent {
+  preview?: NftContentItem;
+  detail?: NftContentItem;
+  audio?: NftContentItem;
+  video?: NftContentItem;
+}
+
+export interface NftInfo {
+  contract_address: string;
+  token_id: string | null;
+  name?: string;
+  interface?: 'erc721' | 'erc1155';
+  content?: NftContent;
+  flags?: {
+    is_spam?: boolean;
+  };
+}
+
+export interface Transfer {
+  fungible_info?: FungibleInfo;
+  nft_info?: NftInfo;
+  direction: 'in' | 'out' | 'self';
+  quantity: Quantity;
+  value: number;
+  price: number;
+  sender: string;
+  recipient: string;
+  act_id?: string;
+}
+
+export interface Approval {
+  fungible_info?: FungibleInfo;
+  nft_info?: NftInfo;
+  quantity: Quantity;
+  sender: string;
+  act_id?: string;
+}
+
+export interface CollectionInfo {
+  id: string;
+  name: string;
+  icon_url?: string;
+}
+
+export interface CollectionApproval {
+  collection_info?: CollectionInfo;
+  cancelled: boolean;
+  spender: string;
+  act_id: string;
+}
+
+export interface Method {
+  id?: string;
+  name?: string;
+}
+
+export interface ApplicationMetadata {
+  name?: string;
+  icon?: {
+    url: string | null;
+  };
+  contract_address?: string;
+  method?: Method;
+}
+
+export interface Flags {
+  is_trash?: boolean;
+}
+
+export interface Act {
+  id: string;
+  type: 'send' | 'receive' | 'trade' | 'deposit' | 'withdraw' | 'approve' | 'execute' | 'deploy' | 'mint' | 'burn' | 'claim';
+  application_metadata?: ApplicationMetadata;
+}
+
+export interface TransactionAttributes {
+  operation_type?: 'approve' | 'borrow' | 'burn' | 'cancel' | 'claim' | 'deploy' | 'deposit' | 'execute' | 'mint' | 'receive' | 'repay' | 'send' | 'stake' | 'trade' | 'unstake' | 'withdraw';
+  hash: string;
+  mined_at_block: number;
+  mined_at: string;
+  sent_from: string;
+  sent_to: string;
+  status: 'confirmed' | 'failed' | 'pending';
+  nonce: number;
+  fee: Fee;
+  transfers: Array<Transfer>;
+  approvals: Array<Approval>;
+  collection_approvals?: Array<CollectionApproval>;
+  application_metadata?: ApplicationMetadata;
+  flags?: Flags;
+  acts?: Array<Act>;
+  paymaster?: string;
+}
+
+export interface RelationshipData {
+  type: string;
+  id: string;
+}
+
+export interface ChainRelationship {
+  links: {
+    related: string;
+  };
+  data: RelationshipData;
+}
+
+export interface DappRelationship {
+  data: RelationshipData;
+}
+
+export interface Relationships {
+  chain?: ChainRelationship;
+  dapp?: DappRelationship;
+}
+
+export interface TransactionDataItem {
+  type: string;
+  id: string;
+  attributes: TransactionAttributes;
+  relationships?: Relationships;
+}
+
+export interface Links {
+  self: string;
+  next?: string;
+}
+
+export interface ListWalletTransactions {
+  links: Links;
+  data: Array<TransactionDataItem>;
+}
+
+// ===============================
 // CRYPTO SERVICE TYPES
 // ===============================
 
@@ -311,6 +483,7 @@ export enum CryptoErrorCodes {
   WALLET_NOT_FOUND = 'WALLET_NOT_FOUND',
   DUPLICATE_WALLET = 'DUPLICATE_WALLET',
   INVALID_ADDRESS = 'INVALID_ADDRESS',
+  INVALID_PARAMETERS = 'INVALID_PARAMETERS',
   ZERION_API_ERROR = 'ZERION_API_ERROR',
   SYNC_IN_PROGRESS = 'SYNC_IN_PROGRESS',
   INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',

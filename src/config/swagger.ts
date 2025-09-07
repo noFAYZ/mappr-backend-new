@@ -651,6 +651,297 @@ const swaggerDefinition = {
           },
         },
       },
+      BlockchainNetwork: {
+        type: 'string',
+        enum: [
+          'ETHEREUM',
+          'POLYGON',
+          'BSC',
+          'AVALANCHE',
+          'ARBITRUM',
+          'OPTIMISM',
+          'BASE',
+          'FANTOM',
+          'SOLANA',
+        ],
+        description: 'Supported blockchain networks',
+        example: 'ETHEREUM',
+      },
+      TokenBalance: {
+        type: 'object',
+        properties: {
+          token_address: {
+            type: 'string',
+            description: 'Token contract address',
+            example: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+          },
+          symbol: {
+            type: 'string',
+            description: 'Token symbol',
+            example: 'USDT',
+          },
+          name: {
+            type: 'string',
+            description: 'Token name',
+            example: 'Tether USD',
+          },
+          balance: {
+            type: 'string',
+            description: 'Raw token balance',
+            example: '1000000000',
+          },
+          balance_formatted: {
+            type: 'string',
+            description: 'Formatted token balance',
+            example: '1000.0',
+          },
+          decimals: {
+            type: 'number',
+            description: 'Token decimals',
+            example: 6,
+          },
+          logo: {
+            type: 'string',
+            nullable: true,
+            description: 'Token logo URL',
+            example:
+              'https://logo.moralis.io/0x1_0xdac17f958d2ee523a2206206994597c13d831ec7_a578c5277503e5b0972f1d9b99c6dd8c',
+          },
+          verified_contract: {
+            type: 'boolean',
+            nullable: true,
+            description: 'Whether contract is verified',
+            example: true,
+          },
+          possible_spam: {
+            type: 'boolean',
+            nullable: true,
+            description: 'Whether token is potentially spam',
+            example: false,
+          },
+          usd_price: {
+            type: 'number',
+            nullable: true,
+            description: 'Current USD price per token',
+            example: 1.0,
+          },
+          usd_value: {
+            type: 'number',
+            nullable: true,
+            description: 'Total USD value of holdings',
+            example: 1000.0,
+          },
+          percentage_relative_to_total_supply: {
+            type: 'number',
+            nullable: true,
+            description: 'Percentage of total supply held',
+            example: 0.001,
+          },
+        },
+        required: ['token_address', 'symbol', 'name', 'balance', 'balance_formatted', 'decimals'],
+      },
+      NFTMetadata: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            nullable: true,
+            description: 'NFT name',
+            example: 'Cool NFT #1234',
+          },
+          description: {
+            type: 'string',
+            nullable: true,
+            description: 'NFT description',
+            example: 'A really cool NFT',
+          },
+          image: {
+            type: 'string',
+            nullable: true,
+            description: 'NFT image URL',
+            example: 'https://ipfs.io/ipfs/QmXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+          },
+          animation_url: {
+            type: 'string',
+            nullable: true,
+            description: 'NFT animation URL',
+          },
+          external_url: {
+            type: 'string',
+            nullable: true,
+            description: 'External URL',
+          },
+          attributes: {
+            type: 'array',
+            nullable: true,
+            items: {
+              type: 'object',
+              properties: {
+                trait_type: { type: 'string' },
+                value: { type: 'string' },
+              },
+            },
+            description: 'NFT attributes',
+          },
+        },
+      },
+      NFT: {
+        type: 'object',
+        properties: {
+          token_address: {
+            type: 'string',
+            description: 'NFT contract address',
+            example: '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d',
+          },
+          token_id: {
+            type: 'string',
+            description: 'NFT token ID',
+            example: '1234',
+          },
+          contract_type: {
+            type: 'string',
+            description: 'Contract type (ERC721, ERC1155)',
+            example: 'ERC721',
+          },
+          token_uri: {
+            type: 'string',
+            nullable: true,
+            description: 'Token metadata URI',
+            example: 'https://ipfs.io/ipfs/QmXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+          },
+          metadata: {
+            type: 'object',
+            nullable: true,
+            description: 'Raw metadata',
+          },
+          normalized_metadata: {
+            $ref: '#/components/schemas/NFTMetadata',
+            nullable: true,
+          },
+          amount: {
+            type: 'string',
+            nullable: true,
+            description: 'Amount held (for ERC1155)',
+            example: '1',
+          },
+          name: {
+            type: 'string',
+            nullable: true,
+            description: 'Collection name',
+            example: 'Bored Ape Yacht Club',
+          },
+          symbol: {
+            type: 'string',
+            nullable: true,
+            description: 'Collection symbol',
+            example: 'BAYC',
+          },
+          block_number_minted: {
+            type: 'string',
+            nullable: true,
+            description: 'Block number when minted',
+            example: '12345678',
+          },
+          possible_spam: {
+            type: 'boolean',
+            nullable: true,
+            description: 'Whether NFT is potentially spam',
+            example: false,
+          },
+          verified_collection: {
+            type: 'boolean',
+            nullable: true,
+            description: 'Whether collection is verified',
+            example: true,
+          },
+          floor_price_usd: {
+            type: 'number',
+            nullable: true,
+            description: 'Collection floor price in USD',
+            example: 25000.0,
+          },
+        },
+        required: ['token_address', 'token_id', 'contract_type'],
+      },
+      DeFiProtocol: {
+        type: 'object',
+        properties: {
+          protocol: {
+            type: 'string',
+            description: 'Protocol name',
+            example: 'uniswap-v3',
+          },
+          total_usd_value: {
+            type: 'number',
+            description: 'Total USD value in protocol',
+            example: 5000.0,
+          },
+          positions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                label: { type: 'string' },
+                tokens: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      symbol: { type: 'string' },
+                      balance: { type: 'string' },
+                      balance_formatted: { type: 'string' },
+                      usd_value: { type: 'number' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        required: ['protocol', 'total_usd_value'],
+      },
+    },
+    responses: {
+      BadRequest: {
+        description: 'Bad Request - Invalid input parameters',
+        content: {
+          'application/json': {
+            schema: {
+              $ref: '#/components/schemas/ErrorResponse',
+            },
+          },
+        },
+      },
+      Unauthorized: {
+        description: 'Unauthorized - Authentication required',
+        content: {
+          'application/json': {
+            schema: {
+              $ref: '#/components/schemas/ErrorResponse',
+            },
+          },
+        },
+      },
+      NotFound: {
+        description: 'Not Found - Resource not found',
+        content: {
+          'application/json': {
+            schema: {
+              $ref: '#/components/schemas/ErrorResponse',
+            },
+          },
+        },
+      },
+      InternalServerError: {
+        description: 'Internal Server Error',
+        content: {
+          'application/json': {
+            schema: {
+              $ref: '#/components/schemas/ErrorResponse',
+            },
+          },
+        },
+      },
     },
   },
   security: [

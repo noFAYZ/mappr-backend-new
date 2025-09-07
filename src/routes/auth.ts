@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { auth } from '@/lib/auth';
-import { toNodeHandler } from "better-auth/node";
+import { toNodeHandler } from 'better-auth/node';
 
 const router = Router();
 
@@ -72,8 +72,6 @@ router.get('/api/auth/health', (_req, res) => {
 });
  */
 
-
-router.all("/api/auth/*", toNodeHandler(auth));
-
+router.all('/api/auth/*', toNodeHandler(auth));
 
 export default router;

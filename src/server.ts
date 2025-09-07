@@ -23,7 +23,7 @@ async function startServer() {
     // Graceful shutdown
     process.on('SIGTERM', async () => {
       logger.info('SIGTERM signal received: closing HTTP server');
-      
+
       try {
         await shutdownWorkers();
         server.close(() => {
@@ -38,7 +38,7 @@ async function startServer() {
 
     process.on('SIGINT', async () => {
       logger.info('SIGINT signal received: closing HTTP server');
-      
+
       try {
         await shutdownWorkers();
         server.close(() => {

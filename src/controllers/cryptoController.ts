@@ -17,7 +17,6 @@ import {
 import { CryptoServiceError } from '@/types/crypto';
 
 export class CryptoController {
-
   // ===============================
   // WALLET MANAGEMENT
   // ===============================
@@ -42,13 +41,13 @@ export class CryptoController {
         walletId: wallet.id,
         address: wallet.address,
         network: wallet.network,
-        type: wallet.type
+        type: wallet.type,
       });
 
       res.status(201).json({
         success: true,
         data: wallet,
-        message: 'Crypto wallet added successfully'
+        message: 'Crypto wallet added successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -70,12 +69,12 @@ export class CryptoController {
 
       logger.info(`Crypto wallet removed by user ${userId}`, {
         userId,
-        walletId
+        walletId,
       });
 
       res.json({
         success: true,
-        message: 'Crypto wallet removed successfully'
+        message: 'Crypto wallet removed successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -99,13 +98,13 @@ export class CryptoController {
       logger.info(`Crypto wallet updated by user ${userId}`, {
         userId,
         walletId,
-        changes: Object.keys(validatedData)
+        changes: Object.keys(validatedData),
       });
 
       res.json({
         success: true,
         data: wallet,
-        message: 'Crypto wallet updated successfully'
+        message: 'Crypto wallet updated successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -125,7 +124,7 @@ export class CryptoController {
       res.json({
         success: true,
         data: wallets,
-        message: 'Crypto wallets retrieved successfully'
+        message: 'Crypto wallets retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -149,7 +148,7 @@ export class CryptoController {
       res.json({
         success: true,
         data: portfolio,
-        message: 'Wallet portfolio retrieved successfully'
+        message: 'Wallet portfolio retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -176,7 +175,7 @@ export class CryptoController {
       res.json({
         success: true,
         data: portfolio,
-        message: 'Aggregated portfolio retrieved successfully'
+        message: 'Aggregated portfolio retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -214,7 +213,7 @@ export class CryptoController {
         success: true,
         data: result.data,
         pagination: result.pagination,
-        message: 'Wallet transactions retrieved successfully'
+        message: 'Wallet transactions retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -235,11 +234,11 @@ export class CryptoController {
 
       // Get user wallets first
       const wallets = await cryptoService.getUserWallets(userId);
-      
+
       if (!wallets) {
         throw new AppError('Failed to retrieve wallets', 500);
       }
-      
+
       if (wallets.length === 0) {
         res.json({
           success: true,
@@ -250,9 +249,9 @@ export class CryptoController {
             total: 0,
             pages: 0,
             hasNext: false,
-            hasPrev: false
+            hasPrev: false,
           },
-          message: 'No wallets found'
+          message: 'No wallets found',
         });
         return;
       }
@@ -263,7 +262,7 @@ export class CryptoController {
       if (!firstWallet) {
         throw new AppError('No wallet found to retrieve transactions', 404);
       }
-      
+
       const result = await cryptoService.getWalletTransactions(
         userId,
         firstWallet.id,
@@ -275,7 +274,7 @@ export class CryptoController {
         success: true,
         data: result.data,
         pagination: result.pagination,
-        message: 'Transactions retrieved successfully'
+        message: 'Transactions retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -302,18 +301,13 @@ export class CryptoController {
       const pagination = { page, limit };
 
       // Get NFTs
-      const result = await cryptoService.getWalletNFTs(
-        userId,
-        walletId,
-        filters,
-        pagination
-      );
+      const result = await cryptoService.getWalletNFTs(userId, walletId, filters, pagination);
 
       res.json({
         success: true,
         data: result.data,
         pagination: result.pagination,
-        message: 'Wallet NFTs retrieved successfully'
+        message: 'Wallet NFTs retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -334,11 +328,11 @@ export class CryptoController {
 
       // Get user wallets first
       const wallets = await cryptoService.getUserWallets(userId);
-      
+
       if (!wallets) {
         throw new AppError('Failed to retrieve wallets', 500);
       }
-      
+
       if (wallets.length === 0) {
         res.json({
           success: true,
@@ -349,9 +343,9 @@ export class CryptoController {
             total: 0,
             pages: 0,
             hasNext: false,
-            hasPrev: false
+            hasPrev: false,
           },
-          message: 'No wallets found'
+          message: 'No wallets found',
         });
         return;
       }
@@ -362,19 +356,14 @@ export class CryptoController {
       if (!firstWallet) {
         throw new AppError('No wallet found to retrieve NFTs', 404);
       }
-      
-      const result = await cryptoService.getWalletNFTs(
-        userId,
-        firstWallet.id,
-        filters,
-        pagination
-      );
+
+      const result = await cryptoService.getWalletNFTs(userId, firstWallet.id, filters, pagination);
 
       res.json({
         success: true,
         data: result.data,
         pagination: result.pagination,
-        message: 'NFTs retrieved successfully'
+        message: 'NFTs retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -412,7 +401,7 @@ export class CryptoController {
         success: true,
         data: result.data,
         pagination: result.pagination,
-        message: 'Wallet DeFi positions retrieved successfully'
+        message: 'Wallet DeFi positions retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -433,11 +422,11 @@ export class CryptoController {
 
       // Get user wallets first
       const wallets = await cryptoService.getUserWallets(userId);
-      
+
       if (!wallets) {
         throw new AppError('Failed to retrieve wallets', 500);
       }
-      
+
       if (wallets.length === 0) {
         res.json({
           success: true,
@@ -448,9 +437,9 @@ export class CryptoController {
             total: 0,
             pages: 0,
             hasNext: false,
-            hasPrev: false
+            hasPrev: false,
           },
-          message: 'No wallets found'
+          message: 'No wallets found',
         });
         return;
       }
@@ -461,7 +450,7 @@ export class CryptoController {
       if (!firstWallet) {
         throw new AppError('No wallet found to retrieve DeFi positions', 404);
       }
-      
+
       const result = await cryptoService.getWalletDeFiPositions(
         userId,
         firstWallet.id,
@@ -473,7 +462,7 @@ export class CryptoController {
         success: true,
         data: result.data,
         pagination: result.pagination,
-        message: 'DeFi positions retrieved successfully'
+        message: 'DeFi positions retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -500,14 +489,14 @@ export class CryptoController {
         syncAssets: validatedData.syncAssets,
         syncTransactions: validatedData.syncTransactions,
         syncNFTs: validatedData.syncNFTs,
-        syncDeFi: validatedData.syncDeFi
+        syncDeFi: validatedData.syncDeFi,
       });
 
       logger.info(`Wallet sync initiated by user ${userId}`, {
         userId,
         walletId,
         syncOptions: validatedData,
-        jobId: result.jobId
+        jobId: result.jobId,
       });
 
       res.json({
@@ -517,8 +506,8 @@ export class CryptoController {
           walletId,
           syncId: result.jobId,
           status: result.status,
-          wallet: result.wallet
-        }
+          wallet: result.wallet,
+        },
       });
     } catch (error) {
       this.handleError(error, res);
@@ -544,8 +533,8 @@ export class CryptoController {
       } else {
         // Get wallet sync status from database
         const wallet = await cryptoService.getUserWallets(userId);
-        const targetWallet = wallet.find(w => w.id === walletId);
-        
+        const targetWallet = wallet.find((w) => w.id === walletId);
+
         if (!targetWallet) {
           throw new AppError('Wallet not found', 404);
         }
@@ -556,14 +545,14 @@ export class CryptoController {
           lastSyncAt: (targetWallet as any).lastSyncAt || new Date(),
           progress: 100,
           syncedData: ['assets', 'transactions'],
-          errors: []
+          errors: [],
         };
       }
 
       res.json({
         success: true,
         data: syncStatus,
-        message: 'Sync status retrieved successfully'
+        message: 'Sync status retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -596,14 +585,14 @@ export class CryptoController {
           totalReturn: 0,
           totalReturnPct: 0,
           bestPerformer: null,
-          worstPerformer: null
-        }
+          worstPerformer: null,
+        },
       };
 
       res.json({
         success: true,
         data: analytics,
-        message: 'Portfolio analytics retrieved successfully'
+        message: 'Portfolio analytics retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -622,7 +611,7 @@ export class CryptoController {
       }
 
       const { jobId } = req.params;
-      
+
       if (!jobId) {
         throw new AppError('Job ID is required', 400);
       }
@@ -632,7 +621,7 @@ export class CryptoController {
       res.json({
         success: true,
         data: jobStatus,
-        message: 'Job status retrieved successfully'
+        message: 'Job status retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -648,7 +637,7 @@ export class CryptoController {
       res.status(isHealthy ? 200 : 503).json({
         success: isHealthy,
         data: health,
-        message: isHealthy ? 'Service is healthy' : 'Service has issues'
+        message: isHealthy ? 'Service is healthy' : 'Service has issues',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -676,8 +665,8 @@ export class CryptoController {
 
       // Get wallet to verify ownership and get address
       const wallets = await cryptoService.getUserWallets(userId);
-      const wallet = wallets.find(w => w.id === walletId);
-      
+      const wallet = wallets.find((w) => w.id === walletId);
+
       if (!wallet) {
         throw new AppError('Wallet not found', 404);
       }
@@ -688,13 +677,13 @@ export class CryptoController {
         userId,
         walletId,
         dataType,
-        address: wallet.address
+        address: wallet.address,
       });
 
       res.json({
         success: true,
         data,
-        message: `${dataType} data retrieved successfully`
+        message: `${dataType} data retrieved successfully`,
       });
     } catch (error) {
       this.handleError(error, res);
@@ -716,7 +705,7 @@ export class CryptoController {
       res.json({
         success: true,
         data: result,
-        message: 'Transaction sync scheduled successfully'
+        message: 'Transaction sync scheduled successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -734,15 +723,15 @@ export class CryptoController {
       const { includeAnalytics = false } = req.body;
 
       const result = await cryptoService.schedulePortfolioCalculation(
-        userId, 
-        walletId || undefined, 
+        userId,
+        walletId || undefined,
         includeAnalytics
       );
 
       res.json({
         success: true,
         data: result,
-        message: 'Portfolio calculation scheduled successfully'
+        message: 'Portfolio calculation scheduled successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -761,8 +750,8 @@ export class CryptoController {
       if (walletId) {
         // Clear specific wallet cache - verify ownership first
         const wallets = await cryptoService.getUserWallets(userId);
-        const wallet = wallets.find(w => w.id === walletId);
-        
+        const wallet = wallets.find((w) => w.id === walletId);
+
         if (!wallet) {
           throw new AppError('Wallet not found', 404);
         }
@@ -775,7 +764,7 @@ export class CryptoController {
 
       res.json({
         success: true,
-        message: 'Cache cleared successfully'
+        message: 'Cache cleared successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -800,18 +789,171 @@ export class CryptoController {
         exportId: `export_${Date.now()}`,
         format: validatedData.format,
         status: 'initiated',
-        estimatedCompletionTime: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 minutes
+        estimatedCompletionTime: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes
       };
 
       logger.info(`Data export initiated by user ${userId}`, {
         userId,
-        exportOptions: validatedData
+        exportOptions: validatedData,
       });
 
       res.json({
         success: true,
         data: exportJob,
-        message: 'Data export initiated successfully'
+        message: 'Data export initiated successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  // ===============================
+  // ZAPPER INTEGRATION ENDPOINTS
+  // ===============================
+
+  async getZapperWalletData(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate params
+      const { walletId } = WalletParamsSchema.parse(req.params);
+
+      // Parse query options
+      const options: any = {
+        includeTokens: req.query['includeTokens'] === 'true',
+        includeAppPositions: req.query['includeAppPositions'] === 'true',
+        includeNFTs: req.query['includeNFTs'] === 'true',
+        includeTransactions: req.query['includeTransactions'] === 'true',
+        maxTransactions: req.query['maxTransactions']
+          ? parseInt(req.query['maxTransactions'] as string)
+          : 20,
+      };
+
+      if (req.query['networks']) {
+        options.networks = (req.query['networks'] as string).split(',');
+      }
+
+      // Get Zapper data
+      const zapperData = await cryptoService.getZapperWalletData(userId, walletId, options);
+
+      logger.info(`Zapper wallet data retrieved for user ${userId}`, {
+        userId,
+        walletId,
+        totalValue: zapperData.portfolioSummary.totalValueUsd,
+        tokenCount: zapperData.portfolioSummary.tokenCount,
+      });
+
+      res.json({
+        success: true,
+        data: zapperData,
+        message: 'Zapper wallet data retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async syncWalletWithZapper(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate params
+      const { walletId } = WalletParamsSchema.parse(req.params);
+
+      // Parse sync options from body
+      const options = {
+        includeTokens: req.body.includeTokens ?? true,
+        includeAppPositions: req.body.includeAppPositions ?? true,
+        includeNFTs: req.body.includeNFTs ?? true,
+        includeTransactions: req.body.includeTransactions ?? true,
+        networks: req.body.networks,
+      };
+
+      // Sync with Zapper
+      const result = await cryptoService.syncWalletWithZapper(userId, walletId, options);
+
+      logger.info(`Wallet synced with Zapper for user ${userId}`, {
+        userId,
+        walletId,
+        totalValue: result.data.portfolioSummary.totalValueUsd,
+      });
+
+      res.json({
+        success: true,
+        data: result.data,
+        message: result.message,
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async getZapperFarcasterData(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Parse query parameters
+      const { fids, usernames } = req.query;
+      const fidArray = fids ? (fids as string).split(',').map(Number) : undefined;
+      const usernameArray = usernames ? (usernames as string).split(',') : undefined;
+
+      if (!fidArray && !usernameArray) {
+        throw new AppError('Must provide either fids or usernames', 400);
+      }
+
+      // Parse options
+      const options: any = {
+        includeTokens: req.query['includeTokens'] !== 'false',
+        includeAppPositions: req.query['includeAppPositions'] !== 'false',
+        includeNFTs: req.query['includeNFTs'] !== 'false',
+      };
+
+      if (req.query['networks']) {
+        options.networks = (req.query['networks'] as string).split(',');
+      }
+
+      // Get Farcaster data via Zapper
+      const result = await cryptoService.getZapperFarcasterData(fidArray, usernameArray, options);
+
+      logger.info(`Farcaster data retrieved via Zapper for user ${userId}`, {
+        userId,
+        addressCount: result.addresses.length,
+        hasPortfolio: !!result.portfolioData,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Farcaster portfolio data retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async getZapperServiceHealth(_req: Request, res: Response) {
+    try {
+      const health = await cryptoService.getServiceHealth();
+
+      res.json({
+        success: true,
+        data: {
+          zapper: health.zapper,
+          zerion: health.zerion,
+          redis: health.redis,
+          database: health.database,
+          queues: health.queues,
+        },
+        message: 'Service health status retrieved',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -830,7 +972,7 @@ export class CryptoController {
         error: {
           code: error.code,
           message: error.message,
-        }
+        },
       });
     }
 
@@ -841,7 +983,7 @@ export class CryptoController {
         error: {
           code: 'APP_ERROR',
           message: error.message,
-        }
+        },
       });
     }
 
@@ -852,20 +994,20 @@ export class CryptoController {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Invalid request data',
-          details: error.errors
-        }
+          details: error.errors,
+        },
       });
     }
 
     // Handle generic errors
     logger.error('Unexpected error in crypto controller:', error);
-    
+
     return res.status(500).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'An unexpected error occurred'
-      }
+        message: 'An unexpected error occurred',
+      },
     });
   }
 }

@@ -8,7 +8,7 @@ const getConnectionConfig = (): ConnectionOptions | null => {
   const redisHost = process.env['REDIS_HOST'];
   const redisPort = process.env['REDIS_PORT'];
   const redisPassword = process.env['REDIS_PASSWORD'];
-  
+
   if (redisHost && redisPort) {
     logger.warn('REDIS_HOST and REDIS_PORT are deprecated - please use REDIS_URL instead');
   }
@@ -41,15 +41,15 @@ const getConnectionConfig = (): ConnectionOptions | null => {
       if (url.password) {
         (connectionConfig as any).password = url.password;
       }
-      
+
       logger.info('Redis connection configured via URL', {
         host: (connectionConfig as any).host,
         port: (connectionConfig as any).port,
-        hasPassword: !!(connectionConfig as any).password
+        hasPassword: !!(connectionConfig as any).password,
       });
     } catch (error) {
       logger.error('Invalid REDIS_URL format, falling back to host/port config', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -79,21 +79,23 @@ export const JOB_TYPES = {
 } as const;
 
 // Enhanced queue configuration with better performance settings
-const queueOptions: QueueOptions | undefined = connectionConfig ? {
-  connection: connectionConfig,
-  defaultJobOptions: {
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000,
-    },
-    // Enhanced job options for better reliability
-    delay: 0,
-    priority: 0,
-  },
-} : undefined;
+const queueOptions: QueueOptions | undefined = connectionConfig
+  ? {
+      connection: connectionConfig,
+      defaultJobOptions: {
+        removeOnComplete: 100,
+        removeOnFail: 50,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+        // Enhanced job options for better reliability
+        delay: 0,
+        priority: 0,
+      },
+    }
+  : undefined;
 
 // Initialize queues only if Redis is available
 export let cryptoSyncQueue: Queue | null = null;
@@ -144,9 +146,9 @@ export class QueueManager {
   }
 
   async closeAllQueues(): Promise<void> {
-    const closePromises = Array.from(this.queues.values()).map(queue => queue.close());
-    const workerClosePromises = Array.from(this.workers.values()).map(worker => worker.close());
-    
+    const closePromises = Array.from(this.queues.values()).map((queue) => queue.close());
+    const workerClosePromises = Array.from(this.workers.values()).map((worker) => worker.close());
+
     try {
       await Promise.all([...closePromises, ...workerClosePromises]);
       logger.info('All queues and workers closed successfully');
@@ -158,14 +160,14 @@ export class QueueManager {
 
   async getQueueStats() {
     const stats: Record<string, any> = {};
-    
+
     for (const [name, queue] of this.queues) {
       try {
         const waiting = await queue.getWaiting();
         const active = await queue.getActive();
         const completed = await queue.getCompleted();
         const failed = await queue.getFailed();
-        
+
         stats[name] = {
           waiting: waiting.length,
           active: active.length,
@@ -177,7 +179,7 @@ export class QueueManager {
         stats[name] = { error: 'Failed to get stats' };
       }
     }
-    
+
     return stats;
   }
 }

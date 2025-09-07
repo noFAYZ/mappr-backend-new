@@ -12,7 +12,7 @@ import {
   GetWalletDeFiRequestSchema,
   SyncWalletRequestSchema,
   GetAnalyticsRequestSchema,
-  ExportDataRequestSchema
+  ExportDataRequestSchema,
 } from '@/utils/cryptoValidation';
 
 const router = Router();
@@ -29,8 +29,8 @@ const cryptoRateLimit = rateLimit({
     success: false,
     error: {
       code: 'RATE_LIMIT_EXCEEDED',
-      message: 'Too many requests from this IP, please try again later.'
-    }
+      message: 'Too many requests from this IP, please try again later.',
+    },
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -44,8 +44,8 @@ const writeOperationsRateLimit = rateLimit({
     success: false,
     error: {
       code: 'WRITE_RATE_LIMIT_EXCEEDED',
-      message: 'Too many write operations, please try again later.'
-    }
+      message: 'Too many write operations, please try again later.',
+    },
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -59,8 +59,8 @@ const syncRateLimit = rateLimit({
     success: false,
     error: {
       code: 'SYNC_RATE_LIMIT_EXCEEDED',
-      message: 'Too many sync requests, please wait before trying again.'
-    }
+      message: 'Too many sync requests, please wait before trying again.',
+    },
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -140,7 +140,8 @@ router.get('/wallets', cryptoController.getUserWallets.bind(cryptoController));
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.post('/wallets', 
+router.post(
+  '/wallets',
   writeOperationsRateLimit,
   validate(CreateWalletRequestSchema),
   cryptoController.addWallet.bind(cryptoController)
@@ -182,7 +183,8 @@ router.post('/wallets',
  *       404:
  *         $ref: '#/components/responses/NotFoundError'
  */
-router.get('/wallets/:walletId',
+router.get(
+  '/wallets/:walletId',
   validate(GetWalletDetailsRequestSchema),
   cryptoController.getWalletDetails.bind(cryptoController)
 );
@@ -213,7 +215,8 @@ router.get('/wallets/:walletId',
  *       404:
  *         $ref: '#/components/responses/NotFoundError'
  */
-router.put('/wallets/:walletId',
+router.put(
+  '/wallets/:walletId',
   writeOperationsRateLimit,
   validate(UpdateWalletRequestSchema),
   cryptoController.updateWallet.bind(cryptoController)
@@ -239,7 +242,8 @@ router.put('/wallets/:walletId',
  *       404:
  *         $ref: '#/components/responses/NotFoundError'
  */
-router.delete('/wallets/:walletId',
+router.delete(
+  '/wallets/:walletId',
   writeOperationsRateLimit,
   cryptoController.removeWallet.bind(cryptoController)
 );
@@ -310,7 +314,8 @@ router.get('/portfolio', cryptoController.getAggregatedPortfolio.bind(cryptoCont
  *       200:
  *         description: Successfully retrieved portfolio analytics
  */
-router.get('/analytics',
+router.get(
+  '/analytics',
   validate(GetAnalyticsRequestSchema),
   cryptoController.getPortfolioAnalytics.bind(cryptoController)
 );
@@ -389,7 +394,8 @@ router.get('/transactions', cryptoController.getAllTransactions.bind(cryptoContr
  *             schema:
  *               $ref: '#/components/schemas/PaginatedTransactions'
  */
-router.get('/wallets/:walletId/transactions',
+router.get(
+  '/wallets/:walletId/transactions',
   validate(GetWalletTransactionsRequestSchema),
   cryptoController.getWalletTransactions.bind(cryptoController)
 );
@@ -456,7 +462,8 @@ router.get('/nfts', cryptoController.getAllNFTs.bind(cryptoController));
  *             schema:
  *               $ref: '#/components/schemas/PaginatedNFTs'
  */
-router.get('/wallets/:walletId/nfts',
+router.get(
+  '/wallets/:walletId/nfts',
   validate(GetWalletNFTsRequestSchema),
   cryptoController.getWalletNFTs.bind(cryptoController)
 );
@@ -509,7 +516,8 @@ router.get('/defi', cryptoController.getAllDeFiPositions.bind(cryptoController))
  *       200:
  *         description: Successfully retrieved wallet DeFi positions
  */
-router.get('/wallets/:walletId/defi',
+router.get(
+  '/wallets/:walletId/defi',
   validate(GetWalletDeFiRequestSchema),
   cryptoController.getWalletDeFiPositions.bind(cryptoController)
 );
@@ -565,7 +573,8 @@ router.get('/wallets/:walletId/defi',
  *                     status:
  *                       type: string
  */
-router.post('/wallets/:walletId/sync',
+router.post(
+  '/wallets/:walletId/sync',
   syncRateLimit,
   validate(SyncWalletRequestSchema),
   cryptoController.syncWallet.bind(cryptoController)
@@ -589,12 +598,14 @@ router.post('/wallets/:walletId/sync',
  *       200:
  *         description: Successfully retrieved sync status
  */
-router.get('/wallets/:walletId/sync/status',
-  cryptoController.getSyncStatus.bind(cryptoController)
-);
+router.get('/wallets/:walletId/sync/status', cryptoController.getSyncStatus.bind(cryptoController));
 
 // ===============================
 // EXPORT ROUTES
+// ===============================
+
+// ===============================
+// DATA EXPORT ROUTES
 // ===============================
 
 /**
@@ -624,10 +635,204 @@ router.get('/wallets/:walletId/sync/status',
  *       200:
  *         description: Export initiated successfully
  */
-router.post('/export',
+router.post(
+  '/export',
   writeOperationsRateLimit,
   validate(ExportDataRequestSchema),
   cryptoController.exportPortfolioData.bind(cryptoController)
+);
+
+// ===============================
+// ZAPPER INTEGRATION ROUTES
+// ===============================
+
+/**
+ * @swagger
+ * /api/v1/crypto/wallets/{walletId}/zapper:
+ *   get:
+ *     tags: [Zapper Integration]
+ *     summary: Get wallet portfolio data from Zapper
+ *     description: Retrieve comprehensive portfolio data for a wallet using Zapper's API
+ *     parameters:
+ *       - in: path
+ *         name: walletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Wallet ID
+ *       - in: query
+ *         name: includeTokens
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include token balances
+ *       - in: query
+ *         name: includeAppPositions
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include DeFi app positions
+ *       - in: query
+ *         name: includeNFTs
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include NFT holdings
+ *       - in: query
+ *         name: includeTransactions
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include recent transactions
+ *       - in: query
+ *         name: maxTransactions
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Maximum number of transactions to fetch
+ *       - in: query
+ *         name: networks
+ *         schema:
+ *           type: string
+ *         description: Comma-separated list of networks to include
+ *     responses:
+ *       200:
+ *         description: Wallet portfolio data retrieved successfully
+ *       404:
+ *         description: Wallet not found
+ *       503:
+ *         description: Zapper service not available
+ */
+router.get(
+  '/wallets/:walletId/zapper',
+  authenticate,
+  cryptoRateLimit,
+  cryptoController.getZapperWalletData.bind(cryptoController)
+);
+
+/**
+ * @swagger
+ * /api/crypto/wallets/{walletId}/zapper/sync:
+ *   post:
+ *     tags: [Zapper Integration]
+ *     summary: Sync wallet with Zapper data
+ *     description: Synchronize wallet data with fresh information from Zapper
+ *     parameters:
+ *       - in: path
+ *         name: walletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Wallet ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               includeTokens:
+ *                 type: boolean
+ *                 default: true
+ *               includeAppPositions:
+ *                 type: boolean
+ *                 default: true
+ *               includeNFTs:
+ *                 type: boolean
+ *                 default: true
+ *               includeTransactions:
+ *                 type: boolean
+ *                 default: true
+ *               networks:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Wallet synced successfully
+ *       404:
+ *         description: Wallet not found
+ *       503:
+ *         description: Zapper service not available
+ */
+router.post(
+  '/wallets/:walletId/zapper/sync',
+  authenticate,
+  cryptoRateLimit,
+  writeOperationsRateLimit,
+  cryptoController.syncWalletWithZapper.bind(cryptoController)
+);
+
+/**
+ * @swagger
+ * /api/crypto/zapper/farcaster:
+ *   get:
+ *     tags: [Zapper Integration]
+ *     summary: Get Farcaster user portfolio via Zapper
+ *     description: Retrieve portfolio data for Farcaster users by resolving their FID or username to addresses
+ *     parameters:
+ *       - in: query
+ *         name: fids
+ *         schema:
+ *           type: string
+ *         description: Comma-separated list of Farcaster IDs
+ *       - in: query
+ *         name: usernames
+ *         schema:
+ *           type: string
+ *         description: Comma-separated list of Farcaster usernames
+ *       - in: query
+ *         name: includeTokens
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include token balances
+ *       - in: query
+ *         name: includeAppPositions
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include DeFi app positions
+ *       - in: query
+ *         name: includeNFTs
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include NFT holdings
+ *       - in: query
+ *         name: networks
+ *         schema:
+ *           type: string
+ *         description: Comma-separated list of networks to include
+ *     responses:
+ *       200:
+ *         description: Farcaster portfolio data retrieved successfully
+ *       400:
+ *         description: Must provide either fids or usernames
+ *       503:
+ *         description: Zapper service not available
+ */
+router.get(
+  '/zapper/farcaster',
+  authenticate,
+  cryptoRateLimit,
+  cryptoController.getZapperFarcasterData.bind(cryptoController)
+);
+
+/**
+ * @swagger
+ * /api/crypto/zapper/health:
+ *   get:
+ *     tags: [Zapper Integration]
+ *     summary: Get service health status
+ *     description: Check the health status of Zapper and other integrated services
+ *     responses:
+ *       200:
+ *         description: Service health status retrieved
+ */
+router.get(
+  '/zapper/health',
+  authenticate,
+  cryptoController.getZapperServiceHealth.bind(cryptoController)
 );
 
 export { router as cryptoRoutes };

@@ -1,4 +1,4 @@
-import {  CryptoAssetRegistry, BlockchainNetwork, AssetType } from '@prisma/client';
+import { CryptoAssetRegistry, BlockchainNetwork, AssetType } from '@prisma/client';
 import { prisma } from '@/config/database';
 import { logger } from '../utils/logger';
 
@@ -29,9 +29,7 @@ class AssetCacheService {
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   private readonly PRICE_UPDATE_THRESHOLD = 10 * 60 * 1000; // 10 minutes
 
-  constructor() {
-  
-  }
+  constructor() {}
 
   private getAssetKey(asset: AssetKey): string {
     return `${asset.symbol}_${asset.network}_${asset.contractAddress ?? 'native'}`;
@@ -50,13 +48,13 @@ class AssetCacheService {
     try {
       logger.info('🔄 Refreshing asset cache...');
       const assets = await prisma.cryptoAssetRegistry.findMany();
-      
+
       this.cache.clear();
       for (const asset of assets) {
         const key = this.getAssetKey({
           symbol: asset.symbol,
           network: asset.network,
-          contractAddress: asset.contractAddress
+          contractAddress: asset.contractAddress,
         });
         this.cache.set(key, {
           id: asset.id,
@@ -68,7 +66,7 @@ class AssetCacheService {
           network: asset.network,
           price: asset.price?.toNumber() ?? null,
           priceUsd: asset.priceUsd?.toNumber() ?? null,
-          lastPriceUpdate: asset.lastPriceUpdate ?? null
+          lastPriceUpdate: asset.lastPriceUpdate ?? null,
         });
       }
 
@@ -76,7 +74,7 @@ class AssetCacheService {
       logger.info(`✅ Asset cache refreshed with ${assets.length} assets`);
     } catch (error) {
       logger.warn('⚠️ Asset registry table not found, cache disabled until migration completes', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       // Set cache as refreshed to prevent constant retries
       this.lastCacheRefresh = Date.now();
@@ -85,7 +83,7 @@ class AssetCacheService {
 
   async getAsset(assetKey: AssetKey): Promise<AssetData | null> {
     await this.refreshCache();
-    
+
     const key = this.getAssetKey(assetKey);
     return this.cache.get(key) || null;
   }
@@ -105,7 +103,7 @@ class AssetCacheService {
     const key = this.getAssetKey({
       symbol: assetData.symbol,
       network: assetData.network,
-      contractAddress: assetData.contractAddress
+      contractAddress: assetData.contractAddress,
     });
 
     // Check cache first
@@ -128,7 +126,7 @@ class AssetCacheService {
           network: createdAsset.network,
           price: createdAsset.price?.toNumber() ?? null,
           priceUsd: createdAsset.priceUsd?.toNumber() ?? null,
-          lastPriceUpdate: createdAsset.lastPriceUpdate ?? null
+          lastPriceUpdate: createdAsset.lastPriceUpdate ?? null,
         };
         this.cache.set(key, asset);
         return asset;
@@ -145,8 +143,8 @@ class AssetCacheService {
           where: {
             symbol: assetData.symbol,
             network: assetData.network,
-            contractAddress: null
-          }
+            contractAddress: null,
+          },
         });
 
         if (existingAsset) {
@@ -158,8 +156,8 @@ class AssetCacheService {
               websiteUrl: assetData.websiteUrl ?? null,
               description: assetData.description ?? null,
               isVerified: assetData.isVerified ?? false,
-              updatedAt: new Date()
-            }
+              updatedAt: new Date(),
+            },
           });
         } else {
           creationPromise = prisma.cryptoAssetRegistry.create({
@@ -173,8 +171,8 @@ class AssetCacheService {
               logoUrl: assetData.logoUrl ?? null,
               websiteUrl: assetData.websiteUrl ?? null,
               description: assetData.description ?? null,
-              isVerified: assetData.isVerified ?? false
-            }
+              isVerified: assetData.isVerified ?? false,
+            },
           });
         }
       } else {
@@ -183,8 +181,8 @@ class AssetCacheService {
           where: {
             contractAddress_network: {
               contractAddress: assetData.contractAddress,
-              network: assetData.network
-            }
+              network: assetData.network,
+            },
           },
           update: {
             name: assetData.name,
@@ -192,7 +190,7 @@ class AssetCacheService {
             websiteUrl: assetData.websiteUrl ?? null,
             description: assetData.description ?? null,
             isVerified: assetData.isVerified ?? false,
-            updatedAt: new Date()
+            updatedAt: new Date(),
           },
           create: {
             symbol: assetData.symbol,
@@ -204,15 +202,15 @@ class AssetCacheService {
             logoUrl: assetData.logoUrl ?? null,
             websiteUrl: assetData.websiteUrl ?? null,
             description: assetData.description ?? null,
-            isVerified: assetData.isVerified ?? false
-          }
+            isVerified: assetData.isVerified ?? false,
+          },
         });
       }
     } catch (error) {
       logger.warn('⚠️ Asset registry not available, returning fallback asset', {
         symbol: assetData.symbol,
         network: assetData.network,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       // Return a fallback asset structure
       return {
@@ -225,12 +223,12 @@ class AssetCacheService {
         network: assetData.network,
         price: null,
         priceUsd: null,
-        lastPriceUpdate: null
+        lastPriceUpdate: null,
       };
     }
 
     this.pendingCreations.set(key, creationPromise);
-    
+
     try {
       const createdAsset = await creationPromise;
       asset = {
@@ -243,9 +241,9 @@ class AssetCacheService {
         network: createdAsset.network,
         price: createdAsset.price?.toNumber() ?? null,
         priceUsd: createdAsset.priceUsd?.toNumber() ?? null,
-        lastPriceUpdate: createdAsset.lastPriceUpdate ?? null
+        lastPriceUpdate: createdAsset.lastPriceUpdate ?? null,
       };
-      
+
       this.cache.set(key, asset);
       return asset;
     } finally {
@@ -253,18 +251,20 @@ class AssetCacheService {
     }
   }
 
-  async batchUpdatePrices(priceUpdates: Array<{
-    assetKey: AssetKey;
-    price?: number;
-    priceUsd?: number;
-    marketCap?: number;
-    volume24h?: number;
-    change24h?: number;
-  }>): Promise<void> {
+  async batchUpdatePrices(
+    priceUpdates: Array<{
+      assetKey: AssetKey;
+      price?: number;
+      priceUsd?: number;
+      marketCap?: number;
+      volume24h?: number;
+      change24h?: number;
+    }>
+  ): Promise<void> {
     await this.refreshCache();
 
     // Filter assets that need price updates
-    const assetsToUpdate = priceUpdates.filter(update => {
+    const assetsToUpdate = priceUpdates.filter((update) => {
       const key = this.getAssetKey(update.assetKey);
       const asset = this.cache.get(key);
       return asset && this.shouldUpdatePrice(asset);
@@ -280,63 +280,67 @@ class AssetCacheService {
     const batchSize = 50;
     for (let i = 0; i < assetsToUpdate.length; i += batchSize) {
       const batch = assetsToUpdate.slice(i, i + batchSize);
-      
-      await Promise.all(batch.map(async (update) => {
-        const key = this.getAssetKey(update.assetKey);
-        const asset = this.cache.get(key);
-        
-        if (!asset) return;
 
-        try {
-          await prisma.cryptoAssetRegistry.update({
-            where: { id: asset.id },
-            data: {
+      await Promise.all(
+        batch.map(async (update) => {
+          const key = this.getAssetKey(update.assetKey);
+          const asset = this.cache.get(key);
+
+          if (!asset) return;
+
+          try {
+            await prisma.cryptoAssetRegistry.update({
+              where: { id: asset.id },
+              data: {
+                price: update.price ?? null,
+                priceUsd: update.priceUsd ?? null,
+                marketCap: update.marketCap ?? null,
+                volume24h: update.volume24h ?? null,
+                change24h: update.change24h ?? null,
+                lastPriceUpdate: new Date(),
+                priceUpdateCount: { increment: 1 },
+                updatedAt: new Date(),
+              },
+            });
+
+            // Update cache
+            this.cache.set(key, {
+              ...asset,
               price: update.price ?? null,
               priceUsd: update.priceUsd ?? null,
-              marketCap: update.marketCap ?? null,
-              volume24h: update.volume24h ?? null,
-              change24h: update.change24h ?? null,
               lastPriceUpdate: new Date(),
-              priceUpdateCount: { increment: 1 },
-              updatedAt: new Date()
-            }
-          });
-
-          // Update cache
-          this.cache.set(key, {
-            ...asset,
-            price: update.price ?? null,
-            priceUsd: update.priceUsd ?? null,
-            lastPriceUpdate: new Date()
-          });
-        } catch (error) {
-          logger.error(`Failed to update price for asset ${asset.symbol}:`, error);
-        }
-      }));
+            });
+          } catch (error) {
+            logger.error(`Failed to update price for asset ${asset.symbol}:`, error);
+          }
+        })
+      );
     }
 
     logger.info(`✅ Batch price update completed for ${assetsToUpdate.length} assets`);
   }
 
-  async batchFindOrCreateAssets(assetsData: Array<{
-    symbol: string;
-    name: string;
-    contractAddress?: string | null | undefined;
-    decimals: number;
-    type: AssetType;
-    network: BlockchainNetwork;
-    logoUrl?: string | null | undefined;
-    websiteUrl?: string | null | undefined;
-    description?: string | null | undefined;
-    isVerified?: boolean;
-  }>): Promise<AssetData[]> {
+  async batchFindOrCreateAssets(
+    assetsData: Array<{
+      symbol: string;
+      name: string;
+      contractAddress?: string | null | undefined;
+      decimals: number;
+      type: AssetType;
+      network: BlockchainNetwork;
+      logoUrl?: string | null | undefined;
+      websiteUrl?: string | null | undefined;
+      description?: string | null | undefined;
+      isVerified?: boolean;
+    }>
+  ): Promise<AssetData[]> {
     const results: AssetData[] = [];
     const batchSize = 20;
 
     for (let i = 0; i < assetsData.length; i += batchSize) {
       const batch = assetsData.slice(i, i + batchSize);
       const batchResults = await Promise.all(
-        batch.map(assetData => this.findOrCreateAsset(assetData))
+        batch.map((assetData) => this.findOrCreateAsset(assetData))
       );
       results.push(...batchResults);
     }
@@ -353,7 +357,7 @@ class AssetCacheService {
     return {
       size: this.cache.size,
       lastRefresh: this.lastCacheRefresh,
-      pendingCreations: this.pendingCreations.size
+      pendingCreations: this.pendingCreations.size,
     };
   }
 

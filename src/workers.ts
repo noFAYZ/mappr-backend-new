@@ -5,7 +5,7 @@ import { queueManager } from '@/config/queue';
 export async function initializeWorkers(): Promise<void> {
   try {
     logger.info('Initializing background workers...');
-    
+
     // Initialize crypto workers (if queues are available)
     const queuesAvailable = process.env['REDIS_URL'] || process.env['REDIS_HOST'];
     if (queuesAvailable) {
@@ -19,7 +19,7 @@ export async function initializeWorkers(): Promise<void> {
     } else {
       logger.warn('Redis not configured - background workers will be disabled');
     }
-    
+
     logger.info('Worker initialization completed');
   } catch (error) {
     logger.error('Failed to initialize workers:', error);
@@ -31,9 +31,9 @@ export async function initializeWorkers(): Promise<void> {
 export async function shutdownWorkers(): Promise<void> {
   try {
     logger.info('Shutting down background workers...');
-    
+
     await queueManager.closeAllQueues();
-    
+
     logger.info('All background workers shut down successfully');
   } catch (error) {
     logger.error('Error shutting down workers:', error);
@@ -66,5 +66,5 @@ process.on('SIGTERM', async () => {
 
 export default {
   initialize: initializeWorkers,
-  shutdown: shutdownWorkers
+  shutdown: shutdownWorkers,
 };

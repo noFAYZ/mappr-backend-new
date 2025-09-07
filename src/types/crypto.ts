@@ -1,4 +1,11 @@
-import { WalletType, BlockchainNetwork, AssetType, TransactionType, TransactionStatus, NFTStandard } from '@prisma/client';
+import {
+  WalletType,
+  BlockchainNetwork,
+  AssetType,
+  TransactionType,
+  TransactionStatus,
+  NFTStandard,
+} from '@prisma/client';
 
 // ===============================
 // ZERION TRANSACTION DATA TYPES
@@ -111,12 +118,39 @@ export interface Flags {
 
 export interface Act {
   id: string;
-  type: 'send' | 'receive' | 'trade' | 'deposit' | 'withdraw' | 'approve' | 'execute' | 'deploy' | 'mint' | 'burn' | 'claim';
+  type:
+    | 'send'
+    | 'receive'
+    | 'trade'
+    | 'deposit'
+    | 'withdraw'
+    | 'approve'
+    | 'execute'
+    | 'deploy'
+    | 'mint'
+    | 'burn'
+    | 'claim';
   application_metadata?: ApplicationMetadata;
 }
 
 export interface TransactionAttributes {
-  operation_type?: 'approve' | 'borrow' | 'burn' | 'cancel' | 'claim' | 'deploy' | 'deposit' | 'execute' | 'mint' | 'receive' | 'repay' | 'send' | 'stake' | 'trade' | 'unstake' | 'withdraw';
+  operation_type?:
+    | 'approve'
+    | 'borrow'
+    | 'burn'
+    | 'cancel'
+    | 'claim'
+    | 'deploy'
+    | 'deposit'
+    | 'execute'
+    | 'mint'
+    | 'receive'
+    | 'repay'
+    | 'send'
+    | 'stake'
+    | 'trade'
+    | 'unstake'
+    | 'withdraw';
   hash: string;
   mined_at_block: number;
   mined_at: string;
@@ -465,6 +499,75 @@ export enum CacheKeys {
 }
 
 // ===============================
+// ZAPPER API TYPES
+// ===============================
+
+export interface ZapperPortfolioSummary {
+  totalValueUsd: number;
+  tokenValue: number;
+  appPositionValue: number;
+  nftValue: number;
+  tokenCount: number;
+  appPositionCount: number;
+  nftCount: number;
+}
+
+export interface ZapperTokenBalance {
+  tokenAddress: string;
+  symbol: string;
+  name?: string;
+  balance: number;
+  balanceUsd: number;
+  imageUrl?: string | null;
+  network: BlockchainNetwork;
+  price?: number;
+}
+
+export interface ZapperAppPosition {
+  appName: string;
+  appId: string;
+  type: string;
+  balanceUsd: number;
+  tokens: ZapperTokenBalance[];
+  protocol?: string;
+}
+
+export interface ZapperNFTItem {
+  tokenId: string;
+  name?: string;
+  imageUrl?: string;
+  estimatedValueUsd?: number;
+  collectionName: string;
+}
+
+export interface ZapperTransaction {
+  hash: string;
+  timestamp: string;
+  network: string;
+  description: string;
+  valueUsd?: number;
+}
+
+export interface ZapperWalletData {
+  address: string;
+  portfolioSummary: ZapperPortfolioSummary;
+  tokens: ZapperTokenBalance[];
+  appPositions: ZapperAppPosition[];
+  nfts: ZapperNFTItem[];
+  recentTransactions: ZapperTransaction[];
+  lastUpdated: Date;
+}
+
+export interface ZapperSyncOptions {
+  includeTokens?: boolean;
+  includeAppPositions?: boolean;
+  includeNFTs?: boolean;
+  includeTransactions?: boolean;
+  networks?: BlockchainNetwork[];
+  maxTransactions?: number;
+}
+
+// ===============================
 // ERROR TYPES
 // ===============================
 
@@ -485,6 +588,7 @@ export enum CryptoErrorCodes {
   INVALID_ADDRESS = 'INVALID_ADDRESS',
   INVALID_PARAMETERS = 'INVALID_PARAMETERS',
   ZERION_API_ERROR = 'ZERION_API_ERROR',
+  ZAPPER_API_ERROR = 'ZAPPER_API_ERROR',
   SYNC_IN_PROGRESS = 'SYNC_IN_PROGRESS',
   INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
   RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',

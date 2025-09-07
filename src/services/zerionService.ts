@@ -58,13 +58,13 @@ export class ZerionService {
       circuitBreakerThreshold: 5,
       circuitBreakerTimeout: 60000,
       enableMetrics: true,
-      ...config
+      ...config,
     };
 
     this.circuitBreaker = {
       failures: 0,
       lastFailureTime: null,
-      state: 'CLOSED'
+      state: 'CLOSED',
     };
 
     this.metrics = {
@@ -76,7 +76,7 @@ export class ZerionService {
       timeouts: 0,
       circuitBreakerTrips: 0,
       lastRequestTime: 0,
-      requestsPerMinute: 0
+      requestsPerMinute: 0,
     };
 
     // Cleanup old requests every 5 minutes
@@ -88,23 +88,28 @@ export class ZerionService {
         CryptoErrorCodes.ZERION_API_ERROR,
         500
       );
-      logger.error('ZerionService initialization failed: missing API key', { error: error.message });
+      logger.error('ZerionService initialization failed: missing API key', {
+        error: error.message,
+      });
       throw error;
     }
 
     try {
       this.sdk = new ZerionSDK({
-        apiKey: config.apiKey
+        apiKey: config.apiKey,
       } as any);
       logger.info('Zerion SDK initialized successfully', {
         config: {
           timeout: this.config.timeout,
           retries: this.config.retries,
-          circuitBreakerThreshold: this.config.circuitBreakerThreshold
-        }
+          circuitBreakerThreshold: this.config.circuitBreakerThreshold,
+        },
       });
     } catch (error) {
-      logger.error('Failed to initialize Zerion SDK', { error, apiKeyLength: config.apiKey?.length });
+      logger.error('Failed to initialize Zerion SDK', {
+        error,
+        apiKeyLength: config.apiKey?.length,
+      });
       throw new CryptoServiceError(
         'Failed to initialize Zerion SDK',
         CryptoErrorCodes.ZERION_API_ERROR,
@@ -125,9 +130,9 @@ export class ZerionService {
       address: this.maskAddress(address),
       startTime,
       success: false,
-      retryCount: 0
+      retryCount: 0,
     };
-    
+
     try {
       logger.info('Starting wallet portfolio fetch', {
         requestId,
@@ -135,29 +140,30 @@ export class ZerionService {
         circuitBreakerState: this.circuitBreaker.state,
         metrics: {
           recentSuccessRate: this.getRecentSuccessRate(),
-          avgResponseTime: this.metrics.averageResponseTime
-        }
+          avgResponseTime: this.metrics.averageResponseTime,
+        },
       });
 
       await this.validateRequest(address, 'address');
       this.checkCircuitBreaker();
       this.checkRateLimit();
-      
+
       const response = await this.retryRequest(
         requestId,
         'getWalletPortfolio',
         async (attemptNumber: number) => {
           operationMetrics.retryCount = Math.max(operationMetrics.retryCount, attemptNumber - 1);
-          
+
           // Try multiple SDK methods with fallbacks
           let result: any;
           const methods = [
-            () => (this.sdk as any).wallets?.getPortfolio?.(address,{
-              positions: 'no_filter'
-            }),
+            () =>
+              (this.sdk as any).wallets?.getPortfolio?.(address, {
+                positions: 'no_filter',
+              }),
             () => (this.sdk as any).getWallet?.(address),
             () => (this.sdk as any).wallets?.get?.(address),
-            () => (this.sdk as any).portfolio?.get?.(address)
+            () => (this.sdk as any).portfolio?.get?.(address),
           ];
 
           for (const method of methods) {
@@ -168,7 +174,7 @@ export class ZerionService {
                   requestId,
                   methodIndex: methods.indexOf(method),
                   hasData: !!result.data,
-                  hasAttributes: !!result.attributes
+                  hasAttributes: !!result.attributes,
                 });
                 break;
               }
@@ -176,11 +182,11 @@ export class ZerionService {
               logger.debug('SDK method failed, trying next', {
                 requestId,
                 methodIndex: methods.indexOf(method),
-                error: methodError instanceof Error ? methodError.message : String(methodError)
+                error: methodError instanceof Error ? methodError.message : String(methodError),
               });
             }
           }
-          
+
           if (!result) {
             throw new CryptoServiceError(
               'All Zerion SDK methods failed for portfolio fetch',
@@ -188,17 +194,17 @@ export class ZerionService {
               503
             );
           }
-          
+
           // Validate response structure
           if (!result.data && !result.attributes) {
             logger.warn('Empty or invalid response from Zerion API', {
               requestId,
               address: this.maskAddress(address),
               responseKeys: result ? Object.keys(result).slice(0, 10) : 'null',
-              responseSize: JSON.stringify(result || {}).length
+              responseSize: JSON.stringify(result || {}).length,
             });
           }
-          
+
           return result;
         },
         address
@@ -208,7 +214,7 @@ export class ZerionService {
       operationMetrics.endTime = Date.now();
       operationMetrics.duration = duration;
       operationMetrics.success = true;
-      
+
       logger.info('Successfully fetched wallet portfolio', {
         requestId,
         address: this.maskAddress(address),
@@ -217,9 +223,9 @@ export class ZerionService {
         hasData: !!response?.data,
         dataKeys: response?.data ? Object.keys(response.data).slice(0, 5) : [],
         responseSize: JSON.stringify(response || {}).length,
-        circuitBreakerState: this.circuitBreaker.state
+        circuitBreakerState: this.circuitBreaker.state,
       });
-      
+
       this.recordMetrics(operationMetrics);
       this.recordSuccess(requestId, duration);
       return response;
@@ -228,7 +234,7 @@ export class ZerionService {
       operationMetrics.endTime = Date.now();
       operationMetrics.duration = duration;
       operationMetrics.errorCode = (error as any)?.code || 'UNKNOWN';
-      
+
       logger.error('Failed to fetch wallet portfolio', {
         requestId,
         address: this.maskAddress(address),
@@ -238,34 +244,33 @@ export class ZerionService {
         errorCode: (error as any)?.code,
         statusCode: (error as any)?.response?.status,
         circuitBreakerState: this.circuitBreaker.state,
-        stackTrace: error instanceof Error ? error.stack?.split('\n').slice(0, 3) : undefined
+        stackTrace: error instanceof Error ? error.stack?.split('\n').slice(0, 3) : undefined,
       });
-      
+
       this.recordMetrics(operationMetrics);
       this.recordFailure(requestId, error);
       throw this.handleZerionError(error, 'Failed to fetch wallet portfolio');
     }
   }
 
-
   async getWalletSummary(address: string): Promise<any> {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
-    
+
     try {
       logger.debug('Fetching wallet summary', {
         requestId,
-        address: this.maskAddress(address)
+        address: this.maskAddress(address),
       });
-      
+
       await this.validateRequest(address, 'address');
       this.checkCircuitBreaker();
-      
+
       const response = await this.retryRequest(
         requestId,
         'getWalletSummary',
         async () => {
-          return await (this.sdk as any).getWalletSummary?.(address) || { data: null };
+          return (await (this.sdk as any).getWalletSummary?.(address)) || { data: null };
         },
         address
       );
@@ -274,9 +279,9 @@ export class ZerionService {
       logger.info('Successfully fetched wallet summary', {
         requestId,
         address: this.maskAddress(address),
-        duration
+        duration,
       });
-      
+
       this.recordSuccess(requestId, duration);
       return response;
     } catch (error) {
@@ -285,9 +290,9 @@ export class ZerionService {
         requestId,
         address: this.maskAddress(address),
         duration,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
-      
+
       this.recordFailure(requestId, error);
       throw this.handleZerionError(error, 'Failed to fetch wallet summary');
     }
@@ -300,30 +305,30 @@ export class ZerionService {
   async getWalletPositions(address: string, options?: any): Promise<any> {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
-    
+
     try {
       logger.debug('Fetching wallet positions', {
         requestId,
         address: this.maskAddress(address),
-        options: options ? Object.keys(options) : []
+        options: options ? Object.keys(options) : [],
       });
-      
+
       await this.validateRequest(address, 'address');
       this.checkCircuitBreaker();
-      
+
       const response = await this.retryRequest(
         requestId,
         'getWalletPositions',
         async () => {
-          return await (this.sdk as any).wallets.getPositions?.(address, options) || { data: null };
+          return (
+            (await (this.sdk as any).wallets.getPositions?.(address, options)) || { data: null }
+          );
         },
         address
       );
 
-
       const duration = Date.now() - startTime;
-    
-      
+
       this.recordSuccess(requestId, duration);
       return response;
     } catch (error) {
@@ -332,9 +337,9 @@ export class ZerionService {
         requestId,
         address: this.maskAddress(address),
         duration,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
-      
+
       this.recordFailure(requestId, error);
       throw this.handleZerionError(error, 'Failed to fetch wallet positions');
     }
@@ -343,17 +348,17 @@ export class ZerionService {
   async getAllWalletPositions(address: string, options?: any): Promise<any> {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
-    
+
     try {
       logger.info('Starting all wallet positions fetch', {
         requestId,
         address: this.maskAddress(address),
         options: options ? Object.keys(options) : [],
-        circuitBreakerState: this.circuitBreaker.state
+        circuitBreakerState: this.circuitBreaker.state,
       });
 
       this.checkCircuitBreaker();
-      
+
       const response = await this.retryRequest(
         requestId,
         'getAllWalletPositions',
@@ -361,17 +366,22 @@ export class ZerionService {
           const result = await (this.sdk as any).getAllPositions?.(address, options);
 
           logger.info('Zerion getAllPositions raw result:', result);
-          
+
           if (result?.data) {
             logger.debug('Positions data structure', {
               requestId,
               dataType: typeof result.data,
-              dataKeys: Array.isArray(result.data) ? 'array' : Object.keys(result.data || {}).slice(0, 5),
-              itemCount: Array.isArray(result.data) ? result.data.length : 
-                         typeof result.data === 'object' ? Object.keys(result.data).length : 0
+              dataKeys: Array.isArray(result.data)
+                ? 'array'
+                : Object.keys(result.data || {}).slice(0, 5),
+              itemCount: Array.isArray(result.data)
+                ? result.data.length
+                : typeof result.data === 'object'
+                  ? Object.keys(result.data).length
+                  : 0,
             });
           }
-          
+
           return result;
         },
         address
@@ -379,16 +389,16 @@ export class ZerionService {
 
       const duration = Date.now() - startTime;
       const positionCount = this.extractPositionCount(response);
-      
+
       logger.info('Successfully fetched all wallet positions', {
         requestId,
         address: this.maskAddress(address),
         duration,
         positionCount,
         hasData: !!response?.data,
-        responseSize: JSON.stringify(response || {}).length
+        responseSize: JSON.stringify(response || {}).length,
       });
-      
+
       this.recordSuccess(requestId, duration);
       return response;
     } catch (error) {
@@ -399,9 +409,9 @@ export class ZerionService {
         duration,
         error: error instanceof Error ? error.message : String(error),
         errorCode: (error as any)?.code,
-        statusCode: (error as any)?.response?.status
+        statusCode: (error as any)?.response?.status,
       });
-      
+
       this.recordFailure(requestId, error);
       throw this.handleZerionError(error, 'Failed to fetch all wallet positions');
     }
@@ -414,37 +424,37 @@ export class ZerionService {
   async getWalletTransactions(address: string, options?: any): Promise<any> {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
-    
+
     try {
       logger.debug('Fetching wallet transactions', {
         requestId,
         address: this.maskAddress(address),
-        options: options ? Object.keys(options) : []
+        options: options ? Object.keys(options) : [],
       });
-      
+
       await this.validateRequest(address, 'address');
       this.checkCircuitBreaker();
-      
+
       const response = await this.retryRequest(
         requestId,
         'getWalletTransactions',
         async () => {
-          return await (this.sdk as any).getTransactions?.(address, options) || { data: null };
+          return (await (this.sdk as any).getTransactions?.(address, options)) || { data: null };
         },
         address
       );
 
       const duration = Date.now() - startTime;
       const txCount = response?.data?.length || 0;
-      
+
       logger.info('Successfully fetched wallet transactions', {
         requestId,
         address: this.maskAddress(address),
         duration,
         transactionCount: txCount,
-        hasMore: !!response?.meta?.pagination?.has_next
+        hasMore: !!response?.meta?.pagination?.has_next,
       });
-      
+
       this.recordSuccess(requestId, duration);
       return response;
     } catch (error) {
@@ -454,9 +464,9 @@ export class ZerionService {
         address: this.maskAddress(address),
         duration,
         error: error instanceof Error ? error.message : String(error),
-        options
+        options,
       });
-      
+
       this.recordFailure(requestId, error);
       throw this.handleZerionError(error, 'Failed to fetch wallet transactions');
     }
@@ -465,39 +475,40 @@ export class ZerionService {
   async getAllWalletTransactions(address: string, options?: any): Promise<any> {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
-    
+
     try {
       logger.debug('Fetching all wallet transactions', {
         requestId,
         address: this.maskAddress(address),
-        options: options ? Object.keys(options) : []
+        options: options ? Object.keys(options) : [],
       });
-      
+
       await this.validateRequest(address, 'address');
       this.checkCircuitBreaker();
-      
+
       const response = await this.retryRequest(
         requestId,
         'getAllWalletTransactions',
         async () => {
-          return await (this.sdk as any).wallets.getAllTransactions?.(address, options) || { data: null };
+          return (
+            (await (this.sdk as any).wallets.getAllTransactions?.(address, options)) || {
+              data: null,
+            }
+          );
         },
         address
       );
 
-     
-
-
       const duration = Date.now() - startTime;
       const txCount = Array.isArray(response) ? response?.length : 0;
-      
+
       logger.info('Successfully fetched all wallet transactions', {
         requestId,
         address: this.maskAddress(address),
         duration,
-        totalTransactions: txCount
+        totalTransactions: txCount,
       });
-      
+
       this.recordSuccess(requestId, duration);
       return response;
     } catch (error) {
@@ -506,9 +517,9 @@ export class ZerionService {
         requestId,
         address: this.maskAddress(address),
         duration,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
-      
+
       this.recordFailure(requestId, error);
       throw this.handleZerionError(error, 'Failed to fetch all wallet transactions');
     }
@@ -521,22 +532,22 @@ export class ZerionService {
   async getWalletPnL(address: string, options?: any): Promise<any> {
     const requestId = this.generateRequestId();
     const startTime = Date.now();
-    
+
     try {
       logger.debug('Fetching PnL for wallet', {
         requestId,
         address: this.maskAddress(address),
-        options: options ? Object.keys(options) : []
+        options: options ? Object.keys(options) : [],
       });
-      
+
       await this.validateRequest(address, 'address');
       this.checkCircuitBreaker();
-      
+
       const response = await this.retryRequest(
         requestId,
         'getWalletPnL',
         async () => {
-          return await (this.sdk as any).getPnL?.(address, options) || { data: null };
+          return (await (this.sdk as any).getPnL?.(address, options)) || { data: null };
         },
         address
       );
@@ -545,9 +556,9 @@ export class ZerionService {
       logger.info('Successfully fetched PnL for wallet', {
         requestId,
         address: this.maskAddress(address),
-        duration
+        duration,
       });
-      
+
       this.recordSuccess(requestId, duration);
       return response;
     } catch (error) {
@@ -556,9 +567,9 @@ export class ZerionService {
         requestId,
         address: this.maskAddress(address),
         duration,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
-      
+
       this.recordFailure(requestId, error);
       throw this.handleZerionError(error, 'Failed to fetch wallet PnL');
     }
@@ -567,13 +578,13 @@ export class ZerionService {
   async getWalletChart(address: string, period: any, options?: any): Promise<any> {
     try {
       logger.debug(`Fetching chart data for wallet: ${address}`, { period, options });
-      
+
       const requestId = this.generateRequestId();
       const response = await this.retryRequest(
         requestId,
         'getWalletChart',
         async () => {
-          return await (this.sdk as any).getChart?.(address, period, options) || { data: null };
+          return (await (this.sdk as any).getChart?.(address, period, options)) || { data: null };
         },
         address
       );
@@ -589,13 +600,13 @@ export class ZerionService {
   async getPortfolioAnalysis(address: string): Promise<any> {
     try {
       logger.debug(`Fetching portfolio analysis for wallet: ${address}`);
-      
+
       const requestId = this.generateRequestId();
       const response = await this.retryRequest(
         requestId,
         'getPortfolioAnalysis',
         async () => {
-          return await (this.sdk as any).getPortfolioAnalysis?.(address) || { data: null };
+          return (await (this.sdk as any).getPortfolioAnalysis?.(address)) || { data: null };
         },
         address
       );
@@ -612,12 +623,15 @@ export class ZerionService {
   // WALLET MONITORING
   // ===============================
 
-  async *monitorWalletActivity(address: string, intervalMs: number = 30000): AsyncGenerator<any, void, unknown> {
+  async *monitorWalletActivity(
+    address: string,
+    intervalMs: number = 30000
+  ): AsyncGenerator<any, void, unknown> {
     try {
       logger.info(`Starting wallet monitoring for: ${address}`, { intervalMs });
-      
+
       const monitor = (this.sdk as any).monitorWalletActivity?.(address, intervalMs) || [];
-      
+
       for await (const update of monitor) {
         logger.debug(`Wallet activity update for ${address}:`, update);
         yield update;
@@ -641,10 +655,10 @@ export class ZerionService {
     let lastError: any;
     let totalDelay = 0;
     const maxRetries = this.config.retries || 3;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const attemptStartTime = Date.now();
-      
+
       try {
         logger.debug('Executing API request attempt', {
           requestId,
@@ -654,7 +668,7 @@ export class ZerionService {
           context: context ? this.maskAddress(context) : undefined,
           totalDelayMs: totalDelay,
           circuitBreakerState: this.circuitBreaker.state,
-          previousAttemptErrors: attempt > 1 ? (lastError?.message || 'Unknown') : 'N/A'
+          previousAttemptErrors: attempt > 1 ? lastError?.message || 'Unknown' : 'N/A',
         });
 
         // Add jitter to prevent thundering herd
@@ -665,11 +679,11 @@ export class ZerionService {
 
         const result = await Promise.race([
           request(attempt),
-          this.createTimeoutPromise<T>(operation, requestId)
+          this.createTimeoutPromise<T>(operation, requestId),
         ]);
 
         const attemptDuration = Date.now() - attemptStartTime;
-        
+
         if (attempt > 1) {
           logger.info('API request succeeded after retry', {
             requestId,
@@ -677,13 +691,13 @@ export class ZerionService {
             attempt,
             attemptDuration,
             totalDelay,
-            previousErrors: attempt - 1
+            previousErrors: attempt - 1,
           });
         } else {
           logger.debug('API request succeeded on first attempt', {
             requestId,
             operation,
-            attemptDuration
+            attemptDuration,
           });
         }
 
@@ -692,11 +706,11 @@ export class ZerionService {
         lastError = error;
         const attemptDuration = Date.now() - attemptStartTime;
         const isTimeout = error.message?.includes('timeout');
-        
+
         if (isTimeout) {
           this.metrics.timeouts++;
         }
-        
+
         logger.warn('API request attempt failed', {
           requestId,
           operation,
@@ -707,9 +721,9 @@ export class ZerionService {
           statusCode: error.response?.status,
           isTimeout,
           shouldRetry: !this.shouldNotRetry(error),
-          remainingAttempts: maxRetries - attempt
+          remainingAttempts: maxRetries - attempt,
         });
-        
+
         // Don't retry on certain errors
         if (this.shouldNotRetry(error)) {
           logger.info('Request will not be retried due to error type', {
@@ -717,15 +731,15 @@ export class ZerionService {
             operation,
             errorCode: error.code,
             statusCode: error.response?.status,
-            errorType: error.constructor?.name
+            errorType: error.constructor?.name,
           });
           break;
         }
-        
+
         if (attempt < maxRetries) {
           const delay = this.calculateBackoffDelay(attempt);
           totalDelay += delay;
-          
+
           logger.info('Scheduling retry attempt', {
             requestId,
             operation,
@@ -733,14 +747,14 @@ export class ZerionService {
             delayMs: delay,
             totalDelayMs: totalDelay,
             errorType: error.constructor?.name,
-            backoffStrategy: 'exponential_with_jitter'
+            backoffStrategy: 'exponential_with_jitter',
           });
-          
+
           await this.sleep(delay);
         }
       }
     }
-    
+
     logger.error('All retry attempts exhausted', {
       requestId,
       operation,
@@ -750,11 +764,12 @@ export class ZerionService {
         message: lastError.message,
         code: lastError.code,
         statusCode: lastError.response?.status,
-        type: lastError.constructor?.name
+        type: lastError.constructor?.name,
       },
-      circuitBreakerWillOpen: this.circuitBreaker.failures >= (this.config.circuitBreakerThreshold || 5) - 1
+      circuitBreakerWillOpen:
+        this.circuitBreaker.failures >= (this.config.circuitBreakerThreshold || 5) - 1,
     });
-    
+
     throw lastError;
   }
 
@@ -777,35 +792,35 @@ export class ZerionService {
     if (statusCode >= 400 && statusCode < 500 && statusCode !== 429) {
       return true;
     }
-    
+
     // Don't retry on specific error codes
     const nonRetryableErrors = [
-      'INVALID_ADDRESS', 
-      'WALLET_NOT_FOUND', 
+      'INVALID_ADDRESS',
+      'WALLET_NOT_FOUND',
       'UNAUTHORIZED',
       'FORBIDDEN',
       'BAD_REQUEST',
-      'INVALID_API_KEY'
+      'INVALID_API_KEY',
     ];
-    
+
     if (nonRetryableErrors.includes(error.code)) {
       return true;
     }
-    
+
     // Don't retry if circuit breaker should open
     if (this.circuitBreaker.failures >= this.config.circuitBreakerThreshold! - 1) {
       logger.warn('Circuit breaker threshold reached, will not retry', {
         currentFailures: this.circuitBreaker.failures,
-        threshold: this.config.circuitBreakerThreshold
+        threshold: this.config.circuitBreakerThreshold,
       });
       return true;
     }
-    
+
     return false;
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private handleZerionError(error: any, defaultMessage: string): CryptoServiceError {
@@ -821,7 +836,7 @@ export class ZerionService {
     if (error.response) {
       statusCode = error.response.status;
       message = error.response.data?.message || error.message || defaultMessage;
-      
+
       if (statusCode === 401 || statusCode === 403) {
         code = CryptoErrorCodes.INSUFFICIENT_PERMISSIONS;
       } else if (statusCode === 429) {
@@ -853,23 +868,23 @@ export class ZerionService {
       [BlockchainNetwork.SOLANA]: 'solana',
       [BlockchainNetwork.BITCOIN]: 'bitcoin',
     };
-    
+
     return networkMap[network] || network.toLowerCase();
   }
 
   static mapZerionToNetwork(zerionNetwork: string): BlockchainNetwork {
     const networkMap: Record<string, BlockchainNetwork> = {
-      'ethereum': BlockchainNetwork.ETHEREUM,
-      'polygon': BlockchainNetwork.POLYGON,
+      ethereum: BlockchainNetwork.ETHEREUM,
+      polygon: BlockchainNetwork.POLYGON,
       'binance-smart-chain': BlockchainNetwork.BSC,
-      'arbitrum': BlockchainNetwork.ARBITRUM,
-      'optimism': BlockchainNetwork.OPTIMISM,
-      'avalanche': BlockchainNetwork.AVALANCHE,
-      'base': BlockchainNetwork.BASE,
-      'solana': BlockchainNetwork.SOLANA,
-      'bitcoin': BlockchainNetwork.BITCOIN,
+      arbitrum: BlockchainNetwork.ARBITRUM,
+      optimism: BlockchainNetwork.OPTIMISM,
+      avalanche: BlockchainNetwork.AVALANCHE,
+      base: BlockchainNetwork.BASE,
+      solana: BlockchainNetwork.SOLANA,
+      bitcoin: BlockchainNetwork.BITCOIN,
     };
-    
+
     return networkMap[zerionNetwork] || BlockchainNetwork.ETHEREUM;
   }
 
@@ -877,15 +892,15 @@ export class ZerionService {
   private checkCircuitBreaker(): void {
     if (this.circuitBreaker.state === 'OPEN') {
       const now = Date.now();
-      const timeSinceLastFailure = this.circuitBreaker.lastFailureTime 
-        ? now - this.circuitBreaker.lastFailureTime.getTime() 
+      const timeSinceLastFailure = this.circuitBreaker.lastFailureTime
+        ? now - this.circuitBreaker.lastFailureTime.getTime()
         : 0;
-        
+
       if (timeSinceLastFailure >= this.config.circuitBreakerTimeout!) {
         this.circuitBreaker.state = 'HALF_OPEN';
         logger.info('Circuit breaker moving to HALF_OPEN state', {
           timeSinceLastFailure,
-          timeout: this.config.circuitBreakerTimeout
+          timeout: this.config.circuitBreakerTimeout,
         });
       } else {
         const error = new CryptoServiceError(
@@ -893,13 +908,13 @@ export class ZerionService {
           CryptoErrorCodes.ZERION_API_ERROR,
           503
         );
-        
+
         logger.warn('Circuit breaker is OPEN, rejecting request', {
           failures: this.circuitBreaker.failures,
           timeSinceLastFailure,
-          remainingTime: this.config.circuitBreakerTimeout! - timeSinceLastFailure
+          remainingTime: this.config.circuitBreakerTimeout! - timeSinceLastFailure,
         });
-        
+
         throw error;
       }
     }
@@ -913,7 +928,7 @@ export class ZerionService {
       this.updateAverageResponseTime(duration);
       this.updateRequestsPerMinute();
     }
-    
+
     // Reset circuit breaker on success
     if (this.circuitBreaker.state === 'HALF_OPEN') {
       this.circuitBreaker.state = 'CLOSED';
@@ -922,7 +937,7 @@ export class ZerionService {
       logger.info('Circuit breaker moved to CLOSED state after successful request', {
         requestId,
         duration,
-        previousFailures: this.circuitBreaker.failures
+        previousFailures: this.circuitBreaker.failures,
       });
     } else if (this.circuitBreaker.state === 'CLOSED') {
       // Reset failure count on successful requests
@@ -936,21 +951,21 @@ export class ZerionService {
       this.metrics.failedRequests++;
       this.metrics.lastRequestTime = Date.now();
       this.updateRequestsPerMinute();
-      
+
       // Track specific error types
       if (error?.response?.status === 429) {
         this.metrics.rateLimitHits++;
       }
     }
-    
+
     this.circuitBreaker.failures++;
     this.circuitBreaker.lastFailureTime = new Date();
-    
+
     const threshold = this.config.circuitBreakerThreshold || 5;
     if (this.circuitBreaker.failures >= threshold) {
       this.circuitBreaker.state = 'OPEN';
       this.metrics.circuitBreakerTrips++;
-      
+
       logger.error('Circuit breaker opened due to consecutive failures', {
         requestId,
         failures: this.circuitBreaker.failures,
@@ -958,14 +973,14 @@ export class ZerionService {
         errorCode: error?.code,
         statusCode: error?.response?.status,
         lastFailureTime: this.circuitBreaker.lastFailureTime.toISOString(),
-        lockoutDuration: this.config.circuitBreakerTimeout
+        lockoutDuration: this.config.circuitBreakerTimeout,
       });
     } else {
       logger.warn('Failure recorded, circuit breaker still closed', {
         requestId,
         failures: this.circuitBreaker.failures,
         threshold,
-        remainingFailuresBeforeOpen: threshold - this.circuitBreaker.failures
+        remainingFailuresBeforeOpen: threshold - this.circuitBreaker.failures,
       });
     }
   }
@@ -985,15 +1000,15 @@ export class ZerionService {
     const exponentialDelay = baseDelay * Math.pow(2, attempt - 1);
     const jitter = Math.random() * 0.3 * exponentialDelay; // 30% jitter to prevent thundering herd
     const finalDelay = Math.min(exponentialDelay + jitter, 60000); // Max 60 seconds
-    
+
     logger.debug('Calculated backoff delay', {
       attempt,
       baseDelay,
       exponentialDelay,
       jitter: Math.round(jitter),
-      finalDelay: Math.round(finalDelay)
+      finalDelay: Math.round(finalDelay),
     });
-    
+
     return finalDelay;
   }
 
@@ -1004,18 +1019,18 @@ export class ZerionService {
     } else {
       // Use exponential moving average for more recent data weight
       const alpha = 0.1; // Weight for new data
-      this.metrics.averageResponseTime = 
+      this.metrics.averageResponseTime =
         alpha * duration + (1 - alpha) * this.metrics.averageResponseTime;
     }
   }
 
   private extractPositionCount(response: any): number {
     if (!response?.data) return 0;
-    
+
     if (Array.isArray(response.data)) {
       return response.data.length;
     }
-    
+
     if (typeof response.data === 'object') {
       let totalCount = 0;
       for (const [, data] of Object.entries(response.data)) {
@@ -1025,42 +1040,46 @@ export class ZerionService {
       }
       return totalCount;
     }
-    
+
     return 0;
   }
 
   // Health check and metrics
-  async healthCheck(): Promise<{ healthy: boolean; metrics?: RequestMetrics | undefined; circuitBreaker?: CircuitBreakerState | undefined }> {
+  async healthCheck(): Promise<{
+    healthy: boolean;
+    metrics?: RequestMetrics | undefined;
+    circuitBreaker?: CircuitBreakerState | undefined;
+  }> {
     try {
       logger.info('Performing Zerion API health check', {
         circuitBreakerState: this.circuitBreaker.state,
-        failures: this.circuitBreaker.failures
+        failures: this.circuitBreaker.failures,
       });
-      
+
       // If circuit breaker is open, service is unhealthy
       if (this.circuitBreaker.state === 'OPEN') {
         return {
           healthy: false,
           metrics: this.config.enableMetrics ? { ...this.metrics } : undefined,
-          circuitBreaker: { ...this.circuitBreaker }
+          circuitBreaker: { ...this.circuitBreaker },
         };
       }
-      
+
       // Try a simple check - this would be replaced with an actual health endpoint
       // For now, just return healthy if we can create the SDK instance
       const isHealthy = !!this.sdk;
-      
+
       return {
         healthy: isHealthy,
         metrics: this.config.enableMetrics ? { ...this.metrics } : undefined,
-        circuitBreaker: { ...this.circuitBreaker }
+        circuitBreaker: { ...this.circuitBreaker },
       };
     } catch (error) {
       logger.error('Zerion API health check failed', { error });
       return {
         healthy: false,
         metrics: this.config.enableMetrics ? { ...this.metrics } : undefined,
-        circuitBreaker: { ...this.circuitBreaker }
+        circuitBreaker: { ...this.circuitBreaker },
       };
     }
   }
@@ -1074,15 +1093,15 @@ export class ZerionService {
     this.circuitBreaker = {
       failures: 0,
       lastFailureTime: null,
-      state: 'CLOSED'
+      state: 'CLOSED',
     };
     logger.info('Circuit breaker manually reset', {
       previousState: {
         state: previousState.state,
         failures: previousState.failures,
-        lastFailureTime: previousState.lastFailureTime?.toISOString()
+        lastFailureTime: previousState.lastFailureTime?.toISOString(),
       },
-      newState: this.circuitBreaker.state
+      newState: this.circuitBreaker.state,
     });
   }
 
@@ -1091,25 +1110,29 @@ export class ZerionService {
     return new Promise((resolve, reject) => {
       if (type === 'address') {
         if (!value || typeof value !== 'string') {
-          reject(new CryptoServiceError(
-            'Invalid wallet address provided',
-            CryptoErrorCodes.INVALID_ADDRESS,
-            400
-          ));
+          reject(
+            new CryptoServiceError(
+              'Invalid wallet address provided',
+              CryptoErrorCodes.INVALID_ADDRESS,
+              400
+            )
+          );
           return;
         }
-        
+
         // Basic address validation (adjust based on requirements)
         if (value.length < 10 || value.length > 100) {
-          reject(new CryptoServiceError(
-            'Wallet address has invalid length',
-            CryptoErrorCodes.INVALID_ADDRESS,
-            400
-          ));
+          reject(
+            new CryptoServiceError(
+              'Wallet address has invalid length',
+              CryptoErrorCodes.INVALID_ADDRESS,
+              400
+            )
+          );
           return;
         }
       }
-      
+
       resolve();
     });
   }
@@ -1119,29 +1142,29 @@ export class ZerionService {
     if (this.metrics.requestsPerMinute > 60) {
       logger.warn('Rate limit threshold approached', {
         requestsPerMinute: this.metrics.requestsPerMinute,
-        threshold: 60
+        threshold: 60,
       });
-      
+
       // Add small delay to prevent hitting limits
-      return new Promise(resolve => setTimeout(resolve, 1000)) as any;
+      return new Promise((resolve) => setTimeout(resolve, 1000)) as any;
     }
   }
 
   private updateRequestsPerMinute(): void {
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
-    
+
     // Count requests in the last minute from recent requests
     const recentRequestsInLastMinute = this.recentRequests.filter(
-      req => req.startTime > oneMinuteAgo
+      (req) => req.startTime > oneMinuteAgo
     ).length;
-    
+
     this.metrics.requestsPerMinute = recentRequestsInLastMinute;
   }
 
   private recordMetrics(metrics: DetailedRequestMetrics): void {
     this.recentRequests.push(metrics);
-    
+
     // Keep only recent requests
     if (this.recentRequests.length > this.maxRecentRequests) {
       this.recentRequests = this.recentRequests.slice(-this.maxRecentRequests);
@@ -1151,26 +1174,24 @@ export class ZerionService {
   private cleanupOldRequests(): void {
     const oneHourAgo = Date.now() - 3600000; // 1 hour
     const initialCount = this.recentRequests.length;
-    
-    this.recentRequests = this.recentRequests.filter(
-      req => req.startTime > oneHourAgo
-    );
-    
+
+    this.recentRequests = this.recentRequests.filter((req) => req.startTime > oneHourAgo);
+
     const removed = initialCount - this.recentRequests.length;
     if (removed > 0) {
       logger.debug('Cleaned up old request metrics', {
         removed,
-        remaining: this.recentRequests.length
+        remaining: this.recentRequests.length,
       });
     }
   }
 
   private getRecentSuccessRate(): number {
     if (this.recentRequests.length === 0) return 1;
-    
+
     const recent = this.recentRequests.slice(-50); // Last 50 requests
-    const successful = recent.filter(req => req.success).length;
-    
+    const successful = recent.filter((req) => req.success).length;
+
     return successful / recent.length;
   }
 
@@ -1185,33 +1206,34 @@ export class ZerionService {
     circuitBreaker: CircuitBreakerState;
   } {
     const recent = this.recentRequests.slice(-100); // Last 100 requests
-    const successRate = recent.length > 0 
-      ? recent.filter(req => req.success).length / recent.length 
-      : 1;
-    
-    const avgDuration = recent.length > 0
-      ? recent.reduce((sum, req) => sum + (req.duration || 0), 0) / recent.length
-      : 0;
-    
+    const successRate =
+      recent.length > 0 ? recent.filter((req) => req.success).length / recent.length : 1;
+
+    const avgDuration =
+      recent.length > 0
+        ? recent.reduce((sum, req) => sum + (req.duration || 0), 0) / recent.length
+        : 0;
+
     const errorDistribution: Record<string, number> = {};
     const operationDistribution: Record<string, number> = {};
-    
-    recent.forEach(req => {
+
+    recent.forEach((req) => {
       if (req.errorCode) {
         errorDistribution[req.errorCode] = (errorDistribution[req.errorCode] || 0) + 1;
       }
-      operationDistribution[req.operationType] = (operationDistribution[req.operationType] || 0) + 1;
+      operationDistribution[req.operationType] =
+        (operationDistribution[req.operationType] || 0) + 1;
     });
-    
+
     return {
       basic: { ...this.metrics },
       recent: {
         successRate,
         avgDuration,
         errorDistribution,
-        operationDistribution
+        operationDistribution,
       },
-      circuitBreaker: { ...this.circuitBreaker }
+      circuitBreaker: { ...this.circuitBreaker },
     };
   }
 }

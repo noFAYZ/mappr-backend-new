@@ -3,16 +3,12 @@ import { prisma } from '@/config/database';
 import { logger } from '@/utils/logger';
 import { createZerionService, ZerionService } from '@/services/zerionService';
 import { AssetCacheService } from '@/services/assetCacheService';
-import { 
-  QUEUE_NAMES,
-  JOB_TYPES,
-  queueManager
-} from '@/config/queue';
-import { 
-  SyncWalletJobData, 
+import { QUEUE_NAMES, JOB_TYPES, queueManager } from '@/config/queue';
+import {
+  SyncWalletJobData,
   CreateSnapshotJobData,
   CryptoServiceError,
-  CryptoErrorCodes
+  CryptoErrorCodes,
 } from '@/types/crypto';
 import { AssetType, TransactionType, TransactionStatus } from '@prisma/client';
 
@@ -76,43 +72,43 @@ export class CryptoJobProcessor {
   private constructor() {
     // Initialize asset cache service
     this.assetCacheService = new AssetCacheService();
-    
+
     const zerionApiKey = process.env['ZERION_API_KEY'];
-    
+
     if (!zerionApiKey) {
       logger.warn('ZERION_API_KEY environment variable not set', {
         impact: 'Crypto features will be limited',
-        recommendation: 'Set ZERION_API_KEY environment variable for full functionality'
+        recommendation: 'Set ZERION_API_KEY environment variable for full functionality',
       });
     } else {
       try {
-        this.zerionService = createZerionService({ 
+        this.zerionService = createZerionService({
           apiKey: zerionApiKey,
           timeout: 45000, // 45 seconds
           retries: 4,
-          retryDelay: 2000
+          retryDelay: 2000,
         });
-        
+
         logger.info('Zerion service initialized successfully', {
           hasService: !!this.zerionService,
           config: {
             timeout: 45000,
             retries: 4,
-            circuitBreakerEnabled: true
-          }
+            circuitBreakerEnabled: true,
+          },
         });
       } catch (error) {
         logger.error('Failed to initialize Zerion service', {
           error: error instanceof Error ? error.message : String(error),
           apiKeyProvided: !!zerionApiKey,
-          apiKeyLength: zerionApiKey?.length
+          apiKeyLength: zerionApiKey?.length,
         });
         // Don't throw error - service can work with limited functionality
       }
     }
-    
+
     // Initialize job statistics with enhanced tracking
-    Object.values(JOB_TYPES).forEach(jobType => {
+    Object.values(JOB_TYPES).forEach((jobType) => {
       this.stats.set(jobType, {
         totalProcessed: 0,
         successful: 0,
@@ -121,7 +117,7 @@ export class CryptoJobProcessor {
         lastProcessedAt: null,
         peakMemoryUsage: 0,
         averageMemoryUsage: 0,
-        errorBreakdown: {}
+        errorBreakdown: {},
       });
     });
 
@@ -144,7 +140,7 @@ export class CryptoJobProcessor {
   async processSyncWallet(job: Job<SyncWalletJobData>): Promise<any> {
     const context = this.createJobContext(job, 'SYNC_WALLET');
     const { userId, walletId, fullSync = false } = job.data;
-    
+
     if (!this.canProcessJob(context.jobId, 'SYNC_WALLET')) {
       throw new CryptoServiceError(
         'Cannot process job due to resource constraints',
@@ -156,14 +152,14 @@ export class CryptoJobProcessor {
     try {
       this.activeJobs.set(context.jobId, context);
       await job.updateProgress(0);
-      
+
       // Start resource monitoring for this job
       const initialMemory = process.memoryUsage().heapUsed;
-      
+
       logger.info('Starting wallet sync job', {
         ...context,
         fullSync,
-        activeJobsCount: this.activeJobs.size
+        activeJobsCount: this.activeJobs.size,
       });
 
       // Enhanced input validation
@@ -189,7 +185,7 @@ export class CryptoJobProcessor {
       if (!healthCheck.healthy) {
         logger.warn('Zerion service health check failed, proceeding with caution', {
           ...context,
-          healthCheck
+          healthCheck,
         });
       }
 
@@ -208,7 +204,7 @@ export class CryptoJobProcessor {
       } catch (error) {
         logger.warn('Portfolio sync failed, continuing with limited data', {
           ...context,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
         portfolioData = null;
       }
@@ -221,7 +217,7 @@ export class CryptoJobProcessor {
         );
       }
       await job.updateProgress(50);
-      
+
       // Check memory usage mid-process
       await this.checkMemoryUsage(context, initialMemory);
 
@@ -232,7 +228,8 @@ export class CryptoJobProcessor {
         try {
           const transactionData = await this.zerionService.getWalletTransactions(wallet.address);
           await this.executeWithTransaction(
-            async (tx) => await this.processTransactionData(wallet.id, transactionData, context, tx),
+            async (tx) =>
+              await this.processTransactionData(wallet.id, transactionData, context, tx),
             'processTransactionData'
           );
           syncedDataTypes.push('transactions');
@@ -242,7 +239,7 @@ export class CryptoJobProcessor {
           logger.warn('Transaction sync failed, continuing', {
             ...context,
             error: error instanceof Error ? error.message : String(error),
-            errorCode: (error as any)?.code
+            errorCode: (error as any)?.code,
           });
         }
 
@@ -260,7 +257,7 @@ export class CryptoJobProcessor {
           logger.warn('Position sync failed, continuing', {
             ...context,
             error: error instanceof Error ? error.message : String(error),
-            errorCode: (error as any)?.code
+            errorCode: (error as any)?.code,
           });
         }
       }
@@ -271,16 +268,16 @@ export class CryptoJobProcessor {
         'completeWalletSync'
       );
       await job.updateProgress(100);
-      
+
       // Final memory and performance check
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryDelta = finalMemory - initialMemory;
-      
+
       logger.debug('Job memory usage analysis', {
         ...context,
         initialMemoryMB: Math.round(initialMemory / 1024 / 1024),
         finalMemoryMB: Math.round(finalMemory / 1024 / 1024),
-        memoryDeltaMB: Math.round(memoryDelta / 1024 / 1024)
+        memoryDeltaMB: Math.round(memoryDelta / 1024 / 1024),
       });
 
       const result = {
@@ -288,48 +285,45 @@ export class CryptoJobProcessor {
         success: true,
         syncedAt: new Date(),
         dataTypes: syncedDataTypes,
-        processingTime: Date.now() - context.startTime
+        processingTime: Date.now() - context.startTime,
       };
 
       this.recordJobSuccess(context, result);
       logger.info('Wallet sync job completed successfully', { ...context, result });
       return result;
-
     } catch (jobError) {
       const errorDetails = this.extractErrorDetails(jobError);
-      
+
       logger.error('Wallet sync job failed', {
         ...context,
         ...errorDetails,
-        processingTime: Date.now() - context.startTime
+        processingTime: Date.now() - context.startTime,
       });
-      
+
       // Update wallet sync status to failed with transaction safety
       await this.executeWithTransaction(
         async (tx) => await this.updateWalletStatus(walletId, 'FAILED', context, tx),
         'failWalletSync'
-      ).catch(e => 
-        logger.error('Failed to update wallet sync status', { ...context, error: e })
-      );
+      ).catch((e) => logger.error('Failed to update wallet sync status', { ...context, error: e }));
 
       this.recordJobFailure(context, jobError);
-      
+
       // Store error for finally block
       (context as any).jobError = jobError;
       throw jobError;
     } finally {
       this.activeJobs.delete(context.jobId);
-      
+
       // Update job health metrics based on whether there was an error
       const hadError = !!(context as any).jobError;
       this.updateJobHealth('SYNC_WALLET', !hadError);
-      
+
       // Force garbage collection if memory usage is high
       const currentMemory = process.memoryUsage().heapUsed;
       if (currentMemory > this.memoryThreshold * 0.8 && global.gc) {
         logger.debug('Triggering garbage collection due to high memory usage', {
           currentMemoryMB: Math.round(currentMemory / 1024 / 1024),
-          hadError
+          hadError,
         });
         global.gc();
       }
@@ -337,13 +331,13 @@ export class CryptoJobProcessor {
   }
 
   async processSyncWalletFull(job: Job<SyncWalletFullJobData>): Promise<any> {
-    const { 
-      userId, 
-      walletId, 
+    const {
+      userId,
+      walletId,
       syncAssets = true,
       syncTransactions = true,
       syncNFTs = true,
-      syncDeFi = true
+      syncDeFi = true,
     } = job.data;
 
     // Initialize API tracking
@@ -361,52 +355,49 @@ export class CryptoJobProcessor {
         error?: string;
         timestamp: Date;
       }>,
-      startTime: Date.now()
+      startTime: Date.now(),
     };
 
     const trackApiCall = async <T>(endpoint: string, apiCall: () => Promise<T>): Promise<T> => {
       const startTime = Date.now();
       apiTracker.totalRequests++;
-      
-      
+
       try {
         const result = await apiCall();
         const responseTime = Date.now() - startTime;
         const dataSize = JSON.stringify(result).length;
-        
+
         apiTracker.totalResponseTime += responseTime;
         apiTracker.totalDataSize += dataSize;
         apiTracker.successfulRequests++;
-        
+
         const requestDetail = {
           endpoint,
           responseTime,
           dataSize,
           success: true,
-          timestamp: new Date()
+          timestamp: new Date(),
         };
-        
+
         apiTracker.requestDetails.push(requestDetail);
-        
-        
+
         return result;
       } catch (error) {
         const responseTime = Date.now() - startTime;
         apiTracker.totalResponseTime += responseTime;
         apiTracker.failedRequests++;
-        
+
         const requestDetail = {
           endpoint,
           responseTime,
           dataSize: 0,
           success: false,
           error: error instanceof Error ? error.message : String(error),
-          timestamp: new Date()
+          timestamp: new Date(),
         };
-        
+
         apiTracker.requestDetails.push(requestDetail);
-        
-        
+
         throw error;
       }
     };
@@ -414,7 +405,7 @@ export class CryptoJobProcessor {
     try {
       await job.updateProgress(0);
       console.log(`🚀 Starting full wallet sync for ${this.maskAddress(walletId)}`);
-      
+
       const wallet = await prisma.cryptoWallet.findFirst({
         where: { id: walletId, userId },
       });
@@ -427,18 +418,17 @@ export class CryptoJobProcessor {
         );
       }
 
-      
       const results: any = { walletId, syncedData: [], apiMetrics: {} };
 
       // Track portfolio API call
-      const portfolio = await trackApiCall('getWalletPortfolio', () => 
+      const portfolio = await trackApiCall('getWalletPortfolio', () =>
         this.zerionService!.getWalletPortfolio(wallet.address)
       );
       await this.processPortfolioData(wallet.id, portfolio);
       results.syncedData.push('portfolio');
 
       if (syncAssets) {
-        const positions = await trackApiCall('getWalletPositions', () => 
+        const positions = await trackApiCall('getWalletPositions', () =>
           this.zerionService!.getWalletPositions(wallet.address)
         );
         console.log(`📊 Processing ${positions?.data?.length} asset positions`);
@@ -448,45 +438,43 @@ export class CryptoJobProcessor {
       }
 
       if (syncTransactions) {
-        
         // Get the last transaction timestamp from database for incremental sync
         const lastTransaction = await prisma.cryptoTransaction.findFirst({
           where: { walletId: wallet.id },
           orderBy: { timestamp: 'desc' },
-          select: { timestamp: true, hash: true }
+          select: { timestamp: true, hash: true },
         });
-        
+
         let transactionData;
         let syncType = 'full';
-        
+
         if (lastTransaction) {
           // Incremental sync: fetch only transactions after the last one
           const lastTimestamp = lastTransaction.timestamp.toISOString();
           syncType = 'incremental';
-          
-          
-          transactionData = await trackApiCall('getWalletTransactions (incremental)', () => 
+
+          transactionData = await trackApiCall('getWalletTransactions (incremental)', () =>
             this.zerionService!.getWalletTransactions(wallet.address, {
               'filter[mined_at_gte]': lastTimestamp,
               sort: 'mined_at',
-              'page[size]': 100 // Reasonable page size for incremental updates
+              'page[size]': 100, // Reasonable page size for incremental updates
             })
           );
         } else {
           // First-time sync: fetch recent transactions with limit
           syncType = 'first-time';
-          
-          transactionData = await trackApiCall('getWalletTransactions (first-time)', () => 
+
+          transactionData = await trackApiCall('getWalletTransactions (first-time)', () =>
             this.zerionService!.getWalletTransactions(wallet.address, {
               sort: '-mined_at', // Most recent first
-              'page[size]': 100   // Limit initial sync
+              'page[size]': 100, // Limit initial sync
             })
           );
         }
-        
+
         // Log sync efficiency
         const fetchedCount = this.extractItemCount(transactionData);
-        
+
         console.log(`💸 Processed ${fetchedCount} transactions (${syncType})`);
         await this.processTransactionData(wallet.id, transactionData);
         results.syncedData.push('transactions');
@@ -509,45 +497,49 @@ export class CryptoJobProcessor {
 
       await prisma.cryptoWallet.update({
         where: { id: walletId },
-        data: { 
+        data: {
           lastSyncAt: new Date(),
-          syncStatus: 'COMPLETED'
+          syncStatus: 'COMPLETED',
         },
       });
 
       // Calculate final API metrics
       const totalSyncTime = Date.now() - apiTracker.startTime;
-      const avgResponseTime = apiTracker.totalRequests > 0 ? apiTracker.totalResponseTime / apiTracker.totalRequests : 0;
+      const avgResponseTime =
+        apiTracker.totalRequests > 0 ? apiTracker.totalResponseTime / apiTracker.totalRequests : 0;
       const totalDataSizeMB = apiTracker.totalDataSize / (1024 * 1024);
-      
+
       results.apiMetrics = {
         totalRequests: apiTracker.totalRequests,
         successfulRequests: apiTracker.successfulRequests,
         failedRequests: apiTracker.failedRequests,
-        successRate: apiTracker.totalRequests > 0 ? (apiTracker.successfulRequests / apiTracker.totalRequests) * 100 : 0,
+        successRate:
+          apiTracker.totalRequests > 0
+            ? (apiTracker.successfulRequests / apiTracker.totalRequests) * 100
+            : 0,
         totalResponseTime: apiTracker.totalResponseTime,
         averageResponseTime: avgResponseTime,
         totalDataSizeMB: totalDataSizeMB,
         totalSyncTimeMs: totalSyncTime,
-        requestDetails: apiTracker.requestDetails
+        requestDetails: apiTracker.requestDetails,
       };
 
       await job.updateProgress(100);
-      
+
       console.log(`✅ Wallet sync completed - ${results.syncedData.join(', ')}`);
-      
+
       logger.info(`Completed full wallet sync for wallet ${walletId}`, {
         ...results,
-        apiMetrics: results.apiMetrics
+        apiMetrics: results.apiMetrics,
       });
-      
-      return results;
 
+      return results;
     } catch (error) {
-      console.log(`❌ Wallet sync failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(
+        `❌ Wallet sync failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       const totalSyncTime = Date.now() - apiTracker.startTime;
-      
-      
+
       logger.error(`Full wallet sync failed for wallet ${walletId}:`, {
         error: error instanceof Error ? error.message : String(error),
         apiMetrics: {
@@ -555,10 +547,10 @@ export class CryptoJobProcessor {
           successfulRequests: apiTracker.successfulRequests,
           failedRequests: apiTracker.failedRequests,
           totalSyncTime,
-          requestDetails: apiTracker.requestDetails
-        }
+          requestDetails: apiTracker.requestDetails,
+        },
       });
-      
+
       throw error;
     }
   }
@@ -587,8 +579,11 @@ export class CryptoJobProcessor {
       }
 
       const options = cursor ? { cursor } : {};
-      const transactionData = await this.zerionService.getWalletTransactions(wallet.address, options);
-      
+      const transactionData = await this.zerionService.getWalletTransactions(
+        wallet.address,
+        options
+      );
+
       await job.updateProgress(50);
       await this.processTransactionData(wallet.id, transactionData);
       await job.updateProgress(100);
@@ -597,12 +592,11 @@ export class CryptoJobProcessor {
         walletId,
         processedCount: transactionData?.data?.length || 0,
         hasMore: transactionData?.meta?.pagination?.has_next || false,
-        nextCursor: transactionData?.meta?.pagination?.cursor
+        nextCursor: transactionData?.meta?.pagination?.cursor,
       };
 
       logger.info(`Completed transaction sync for wallet ${walletId}`, result);
       return result;
-
     } catch (error) {
       logger.error(`Transaction sync failed for wallet ${walletId}:`, error);
       throw error;
@@ -623,11 +617,11 @@ export class CryptoJobProcessor {
       let wallets;
       if (walletId) {
         wallets = await prisma.cryptoWallet.findMany({
-          where: { id: walletId, userId }
+          where: { id: walletId, userId },
         });
       } else {
         wallets = await prisma.cryptoWallet.findMany({
-          where: { userId, isActive: true }
+          where: { userId, isActive: true },
         });
       }
 
@@ -658,12 +652,11 @@ export class CryptoJobProcessor {
         userId,
         walletId,
         portfolioValue,
-        calculatedAt: new Date()
+        calculatedAt: new Date(),
       };
 
       logger.info(`Completed portfolio calculation for user ${userId}`, result);
       return result;
-
     } catch (error) {
       logger.error(`Portfolio calculation failed for user ${userId}:`, error);
       throw error;
@@ -690,14 +683,13 @@ export class CryptoJobProcessor {
         totalValueUsd: portfolioData.totalValue,
         assetCount: portfolioData.assetCount,
         snapshotData: portfolioData,
-        createdAt: new Date()
+        createdAt: new Date(),
       };
 
       await job.updateProgress(100);
 
       logger.info(`Created snapshot ${snapshot.id} for user ${userId}`);
       return { snapshotId: snapshot.id, ...portfolioData };
-
     } catch (error) {
       logger.error(`Snapshot creation failed for user ${userId}:`, error);
       throw error;
@@ -708,13 +700,18 @@ export class CryptoJobProcessor {
   // DATA PROCESSING HELPERS
   // ===============================
 
-  private async processPortfolioData(walletId: string, portfolioData: any, context?: JobContext, _tx?: any): Promise<void> {
+  private async processPortfolioData(
+    walletId: string,
+    portfolioData: any,
+    context?: JobContext,
+    _tx?: any
+  ): Promise<void> {
     if (!portfolioData?.data) {
-      logger.warn('No portfolio data to process', { 
-        walletId, 
+      logger.warn('No portfolio data to process', {
+        walletId,
         context: context?.jobId,
         hasData: !!portfolioData,
-        dataKeys: portfolioData ? Object.keys(portfolioData) : []
+        dataKeys: portfolioData ? Object.keys(portfolioData) : [],
       });
       return;
     }
@@ -722,10 +719,10 @@ export class CryptoJobProcessor {
     try {
       const portfolio = portfolioData.data;
       const attributes = portfolio.attributes || {};
-      
+
       // Extract total portfolio value
       const totalValue = parseFloat(attributes.total?.positions || '0');
-      
+
       // Extract position distribution by type
       const positionsByType = attributes.positions_distribution_by_type || {};
       const walletValue = parseFloat(positionsByType.wallet || '0');
@@ -733,7 +730,7 @@ export class CryptoJobProcessor {
       const borrowedValue = parseFloat(positionsByType.borrowed || '0');
       const lockedValue = parseFloat(positionsByType.locked || '0');
       const stakedValue = parseFloat(positionsByType.staked || '0');
-      
+
       // Extract position distribution by chain
       const positionsByChain = attributes.positions_distribution_by_chain || {};
       const arbitrumValue = parseFloat(positionsByChain.arbitrum || '0');
@@ -745,12 +742,12 @@ export class CryptoJobProcessor {
       const fantomValue = parseFloat(positionsByChain.fantom || '0');
       const lineaValue = parseFloat(positionsByChain.linea || '0');
       const polygonValue = parseFloat(positionsByChain.polygon || '0');
-      
+
       // Extract 24h changes
       const changes = attributes.changes || {};
       const absolute24hChange = changes.absolute_1d ? parseFloat(changes.absolute_1d) : null;
       const percent24hChange = changes.percent_1d ? parseFloat(changes.percent_1d) : null;
-      
+
       logger.info('Processing portfolio data', {
         walletId,
         context: context?.jobId,
@@ -760,12 +757,11 @@ export class CryptoJobProcessor {
         absolute24hChange,
         percent24hChange,
         hasPositions: !!attributes.positions_distribution,
-        attributeKeys: Object.keys(attributes).slice(0, 10)
+        attributeKeys: Object.keys(attributes).slice(0, 10),
       });
 
-      
       const prismaClient = _tx || prisma;
-      
+
       // Upsert portfolio data
       const portfolioPayload = {
         walletId,
@@ -789,7 +785,7 @@ export class CryptoJobProcessor {
         rawZerionData: portfolioData,
         lastSyncAt: new Date(),
         syncSource: 'zerion',
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
 
       // Upsert portfolio data with error handling
@@ -798,25 +794,25 @@ export class CryptoJobProcessor {
           where: { walletId },
           create: {
             ...portfolioPayload,
-            createdAt: new Date()
+            createdAt: new Date(),
           },
-          update: portfolioPayload
+          update: portfolioPayload,
         });
-        
+
         logger.debug('Successfully upserted portfolio data', {
           walletId: walletId.substring(0, 8) + '...',
           context: context?.jobId,
           totalValue,
-          hasChanges: absolute24hChange !== null
+          hasChanges: absolute24hChange !== null,
         });
       } catch (portfolioError) {
         logger.error('Failed to upsert portfolio data, continuing without portfolio table', {
           walletId: walletId.substring(0, 8) + '...',
           context: context?.jobId,
           error: portfolioError instanceof Error ? portfolioError.message : String(portfolioError),
-          errorStack: portfolioError instanceof Error ? portfolioError.stack : undefined
+          errorStack: portfolioError instanceof Error ? portfolioError.stack : undefined,
         });
-        
+
         // Continue execution even if portfolio upsert fails
       }
 
@@ -826,10 +822,10 @@ export class CryptoJobProcessor {
           where: { id: walletId },
           data: {
             totalBalanceUsd: totalValue,
-            updatedAt: new Date()
-          }
+            updatedAt: new Date(),
+          },
         });
-        
+
         logger.debug('Updated wallet and portfolio data', {
           walletId: walletId.substring(0, 8) + '...',
           context: context?.jobId,
@@ -837,8 +833,8 @@ export class CryptoJobProcessor {
           portfolioComponents: {
             wallet: walletValue,
             deposited: depositedValue,
-            staked: stakedValue
-          }
+            staked: stakedValue,
+          },
         });
       } else {
         logger.warn('Invalid total value, skipping wallet update but saving portfolio data', {
@@ -846,7 +842,7 @@ export class CryptoJobProcessor {
           context: context?.jobId,
           totalValue,
           originalValue: attributes.total?.positions,
-          dataType: typeof totalValue
+          dataType: typeof totalValue,
         });
       }
 
@@ -857,40 +853,44 @@ export class CryptoJobProcessor {
         logger.debug('No positions distribution found in portfolio data', {
           walletId: walletId.substring(0, 8) + '...',
           context: context?.jobId,
-          availableAttributes: Object.keys(attributes)
+          availableAttributes: Object.keys(attributes),
         });
       }
-
     } catch (error) {
       logger.error('Error processing portfolio data', {
         walletId,
         context: context?.jobId,
         error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
     }
   }
 
-  private async processPositions(walletId: string, positionsData: any, context?: JobContext, _tx?: any): Promise<void> {
+  private async processPositions(
+    walletId: string,
+    positionsData: any,
+    context?: JobContext,
+    _tx?: any
+  ): Promise<void> {
     if (!positionsData) {
       logger.warn('No positions data provided', {
         walletId,
-        context: context?.jobId
+        context: context?.jobId,
       });
       return;
     }
 
     // Handle ZerionPositionsResponse structure
     const positions = positionsData.data || positionsData;
-    
+
     if (!Array.isArray(positions)) {
       logger.warn('Invalid positions data structure - expected array', {
         walletId,
         context: context?.jobId,
         dataType: typeof positions,
         hasData: !!positionsData.data,
-        keys: Object.keys(positionsData).slice(0, 5)
+        keys: Object.keys(positionsData).slice(0, 5),
       });
       return;
     }
@@ -899,12 +899,12 @@ export class CryptoJobProcessor {
     let errorCount = 0;
     let skippedCount = 0;
     let cachedAssetCount = 0;
-    
+
     logger.info('Starting optimized position processing', {
       walletId,
       context: context?.jobId,
       positionCount: positions.length,
-      cacheStats: this.assetCacheService.getCacheStats()
+      cacheStats: this.assetCacheService.getCacheStats(),
     });
 
     // Phase 1: Extract and batch process unique assets
@@ -920,7 +920,7 @@ export class CryptoJobProcessor {
       price?: number;
       priceUsd?: number;
     }> = [];
-    
+
     for (const position of positions) {
       try {
         if (position.type !== 'positions') {
@@ -953,7 +953,7 @@ export class CryptoJobProcessor {
           logoUrl: fungibleInfo.icon?.url || null,
           decimals: fungibleInfo.implementations?.[0]?.decimals || 18,
           type: this.determineAssetType(fungibleInfo),
-          isVerified: !!fungibleInfo.verified
+          isVerified: !!fungibleInfo.verified,
         };
 
         const assetKey = `${assetData.symbol}_${assetData.network}_${assetData.contractAddress ?? 'native'}`;
@@ -963,7 +963,7 @@ export class CryptoJobProcessor {
         const positionData = {
           balance: quantity?.float || this.parseFloat(quantity?.numeric, 0),
           balanceFormatted: quantity?.numeric || '0',
-          balanceUsd: attributes.value || 0
+          balanceUsd: attributes.value || 0,
         };
 
         const additionalMetadata = {
@@ -974,7 +974,7 @@ export class CryptoJobProcessor {
           protocol: attributes.protocol,
           groupId: attributes.group_id,
           updatedAt: attributes.updated_at,
-          updatedAtBlock: attributes.updated_at_block
+          updatedAtBlock: attributes.updated_at_block,
         };
 
         // Skip trash positions unless explicitly requested
@@ -987,7 +987,7 @@ export class CryptoJobProcessor {
         const existingAsset = await this.assetCacheService.getAsset({
           symbol: assetData.symbol,
           network: assetData.network,
-          contractAddress: assetData.contractAddress
+          contractAddress: assetData.contractAddress,
         });
 
         if (existingAsset) {
@@ -1002,7 +1002,7 @@ export class CryptoJobProcessor {
           position,
           assetKey,
           positionData,
-          additionalMetadata
+          additionalMetadata,
         });
 
         // Collect price updates
@@ -1012,30 +1012,28 @@ export class CryptoJobProcessor {
             assetKey: {
               symbol: assetData.symbol,
               network: assetData.network,
-              contractAddress: assetData.contractAddress
+              contractAddress: assetData.contractAddress,
             },
-            priceUsd
+            priceUsd,
           });
         }
-
       } catch (error) {
         errorCount++;
         logger.warn('Error parsing position data', {
           walletId,
           context: context?.jobId,
           positionId: position?.id,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
-
 
     // Phase 2: Batch create new assets (fallback to old method during migration)
     if (assetsToCreate.size > 0) {
       logger.info('Creating new assets (fallback mode during migration)', {
         walletId,
         context: context?.jobId,
-        assetCount: assetsToCreate.size
+        assetCount: assetsToCreate.size,
       });
 
       try {
@@ -1045,7 +1043,7 @@ export class CryptoJobProcessor {
         logger.warn('Registry not available, using fallback asset creation', {
           walletId,
           context: context?.jobId,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
         // Fallback to old individual creation method
         for (const [, assetData] of assetsToCreate.entries()) {
@@ -1055,7 +1053,7 @@ export class CryptoJobProcessor {
             logger.warn('Fallback asset creation failed', {
               walletId,
               assetSymbol: assetData.symbol,
-              error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+              error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
             });
           }
         }
@@ -1070,7 +1068,7 @@ export class CryptoJobProcessor {
         logger.warn('Batch price update failed', {
           walletId,
           context: context?.jobId,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -1079,73 +1077,81 @@ export class CryptoJobProcessor {
     const batchSize = 20;
     for (let i = 0; i < validPositions.length; i += batchSize) {
       const batch = validPositions.slice(i, i + batchSize);
-      
-      await Promise.all(batch.map(async ({ assetKey, positionData }) => {
-        try {
-          // Get asset from cache or fallback to old method
-          const assetKeyParts = assetKey.split('_');
-          if (assetKeyParts.length < 2) {
-            logger.warn('Invalid asset key format', { assetKey, walletId, context: context?.jobId });
-            errorCount++;
-            return;
-          }
-          
-          const symbol = assetKeyParts[0]!;
-          const network = assetKeyParts[1]! as any;
-          const contractAddress: string | null = assetKeyParts[2] === 'native' ? null : assetKeyParts.slice(2).join('_');
-          
-          let asset = await this.assetCacheService.getAsset({
-            symbol,
-            network,
-            contractAddress
-          });
 
-          // Fallback to old asset lookup during migration
-          if (!asset) {
-            try {
-              // @ts-ignore - Fallback to old crypto_assets table
-              asset = await prisma.crypto_assets.findFirst({
-                where: {
+      await Promise.all(
+        batch.map(async ({ assetKey, positionData }) => {
+          try {
+            // Get asset from cache or fallback to old method
+            const assetKeyParts = assetKey.split('_');
+            if (assetKeyParts.length < 2) {
+              logger.warn('Invalid asset key format', {
+                assetKey,
+                walletId,
+                context: context?.jobId,
+              });
+              errorCount++;
+              return;
+            }
+
+            const symbol = assetKeyParts[0]!;
+            const network = assetKeyParts[1]! as any;
+            const contractAddress: string | null =
+              assetKeyParts[2] === 'native' ? null : assetKeyParts.slice(2).join('_');
+
+            let asset = await this.assetCacheService.getAsset({
+              symbol,
+              network,
+              contractAddress,
+            });
+
+            // Fallback to old asset lookup during migration
+            if (!asset) {
+              try {
+                // @ts-ignore - Fallback to old crypto_assets table
+                asset = await prisma.crypto_assets.findFirst({
+                  where: {
+                    symbol,
+                    network,
+                    contractAddress,
+                  },
+                });
+              } catch (fallbackError) {
+                logger.debug('Fallback asset lookup failed', {
                   symbol,
                   network,
-                  contractAddress
-                }
-              });
-            } catch (fallbackError) {
-              logger.debug('Fallback asset lookup failed', {
-                symbol,
-                network,
-                contractAddress,
-                error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+                  contractAddress,
+                  error:
+                    fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+                });
+              }
+            }
+
+            if (asset) {
+              await this.upsertPosition(walletId, asset.id, positionData, context, _tx);
+              processedCount++;
+            } else {
+              errorCount++;
+              logger.warn('Asset not found in cache or fallback table', {
+                walletId,
+                context: context?.jobId,
+                assetKey: assetKey.substring(0, 50) + '...',
               });
             }
-          }
-
-          if (asset) {
-            await this.upsertPosition(walletId, asset.id, positionData, context, _tx);
-            processedCount++;
-          } else {
+          } catch (error) {
             errorCount++;
-            logger.warn('Asset not found in cache or fallback table', {
+            logger.warn('Error upserting position', {
               walletId,
               context: context?.jobId,
-              assetKey: assetKey.substring(0, 50) + '...'
+              assetKey: assetKey.substring(0, 50) + '...',
+              error: error instanceof Error ? error.message : String(error),
             });
           }
-        } catch (error) {
-          errorCount++;
-          logger.warn('Error upserting position', {
-            walletId,
-            context: context?.jobId,
-            assetKey: assetKey.substring(0, 50) + '...',
-            error: error instanceof Error ? error.message : String(error)
-          });
-        }
-      }));
+        })
+      );
     }
-    
+
     const finalCacheStats = this.assetCacheService.getCacheStats();
-    
+
     logger.info('Optimized position processing completed', {
       walletId,
       context: context?.jobId,
@@ -1157,19 +1163,26 @@ export class CryptoJobProcessor {
       cachedAssetCount,
       newAssetsCreated: assetsToCreate.size,
       priceUpdatesApplied: priceUpdates.length,
-      successRate: validPositions.length > 0 ? (processedCount / validPositions.length * 100).toFixed(1) : '0',
-      finalCacheStats
+      successRate:
+        validPositions.length > 0
+          ? ((processedCount / validPositions.length) * 100).toFixed(1)
+          : '0',
+      finalCacheStats,
     });
-
   }
 
-  private async processTransactionData(walletId: string, transactionData: any, context?: JobContext, _tx?: any): Promise<void> {
+  private async processTransactionData(
+    walletId: string,
+    transactionData: any,
+    context?: JobContext,
+    _tx?: any
+  ): Promise<void> {
     if (!transactionData) {
       logger.warn('No transaction data to process', {
         walletId,
         context: context?.jobId,
         hasData: !!transactionData,
-        dataKeys: transactionData ? Object.keys(transactionData) : []
+        dataKeys: transactionData ? Object.keys(transactionData) : [],
       });
       return;
     }
@@ -1183,7 +1196,7 @@ export class CryptoJobProcessor {
     logger.info('Starting transaction processing with enhanced schema', {
       walletId,
       context: context?.jobId,
-      transactionCount: transactions.length
+      transactionCount: transactions.length,
     });
 
     for (const tx of transactions) {
@@ -1192,7 +1205,7 @@ export class CryptoJobProcessor {
           logger.debug('Skipping non-transaction data', {
             walletId,
             context: context?.jobId,
-            type: tx.type
+            type: tx.type,
           });
           skippedCount++;
           continue;
@@ -1202,7 +1215,7 @@ export class CryptoJobProcessor {
           logger.debug('Skipping transaction without attributes', {
             walletId,
             context: context?.jobId,
-            txKeys: Object.keys(tx)
+            txKeys: Object.keys(tx),
           });
           skippedCount++;
           continue;
@@ -1214,7 +1227,7 @@ export class CryptoJobProcessor {
           logger.warn('Transaction missing hash, skipping', {
             walletId,
             context: context?.jobId,
-            txId: tx.id
+            txId: tx.id,
           });
           skippedCount++;
           continue;
@@ -1229,55 +1242,61 @@ export class CryptoJobProcessor {
         const existingTransaction = await prismaClient.cryptoTransaction.findFirst({
           where: {
             hash,
-            network: network as any
-          }
+            network: network as any,
+          },
         });
 
         // Process transfers to determine primary transfer for transaction data
         const transfers = attributes.transfers || [];
         const primaryTransfer = transfers[0]; // Use first transfer as primary
-        
+
         // Process fees
         const fee = attributes.fee;
         const feeValueUsd = fee?.value || 0;
         const feePrice = fee?.price || 0;
-        
+
         // Determine operation type and transaction type
         const operationType = attributes.operation_type;
-        const transactionType = this.determineTransactionTypeFromAttributes(attributes, operationType);
-        
+        const transactionType = this.determineTransactionTypeFromAttributes(
+          attributes,
+          operationType
+        );
+
         // Extract addresses - prioritize main transaction addresses over transfer addresses
         const fromAddress = attributes.sent_from || primaryTransfer?.sender || '';
         const toAddress = attributes.sent_to || primaryTransfer?.recipient || '';
-        
+
         // Calculate transaction value and asset information
         let transactionValue = 0;
         let transactionValueUsd = 0;
         let assetSymbol = 'ETH';
         let assetContractAddress: string | null = null;
-        
+
         if (primaryTransfer) {
-          transactionValue = primaryTransfer.quantity?.float || this.parseFloat(primaryTransfer.quantity?.numeric, 0);
+          transactionValue =
+            primaryTransfer.quantity?.float ||
+            this.parseFloat(primaryTransfer.quantity?.numeric, 0);
           transactionValueUsd = primaryTransfer.value || 0;
-          
+
           if (primaryTransfer.fungible_info) {
             assetSymbol = primaryTransfer.fungible_info.symbol || 'UNKNOWN';
-            assetContractAddress = primaryTransfer.fungible_info.implementations?.[0]?.address || null;
+            assetContractAddress =
+              primaryTransfer.fungible_info.implementations?.[0]?.address || null;
           } else if (primaryTransfer.nft_info) {
             assetSymbol = 'NFT';
             assetContractAddress = primaryTransfer.nft_info.contract_address;
           }
         }
-        
+
         // Process application metadata
         const appMetadata = attributes.application_metadata;
         const methodId = appMetadata?.method?.id;
-        
+
         // Process acts for categorization
         const acts = attributes.acts || [];
         const category = this.determineCategoryFromActs(acts, operationType);
         const tags = this.generateTagsFromTransaction(attributes, acts);
-        
+
         // Build comprehensive transaction data
         const txData = {
           walletId,
@@ -1307,29 +1326,29 @@ export class CryptoJobProcessor {
               value: t.value,
               asset: t.fungible_info?.symbol || t.nft_info?.name,
               sender: t.sender,
-              recipient: t.recipient
+              recipient: t.recipient,
             })),
             approvals: attributes.approvals || [],
             acts: acts.map((act: any) => ({
               id: act.id,
               type: act.type,
-              application: act.application_metadata?.name
-            }))
+              application: act.application_metadata?.name,
+            })),
           }),
           internalTxs: transfers.length > 1 ? JSON.stringify(transfers.slice(1)) : null,
           parentTxHash: null, // Not available in current schema
           relatedTxHashes: [], // Could be determined from act_id relationships
           category,
           tags,
-          notes: this.generateTransactionNotes(attributes, appMetadata)
+          notes: this.generateTransactionNotes(attributes, appMetadata),
         };
 
         if (!existingTransaction) {
           await prismaClient.cryptoTransaction.create({
-            data: txData
+            data: txData,
           });
           processedCount++;
-          
+
           logger.debug('Created new transaction with enhanced data', {
             walletId: walletId.substring(0, 8) + '...',
             context: context?.jobId,
@@ -1339,7 +1358,7 @@ export class CryptoJobProcessor {
             valueUsd: transactionValueUsd,
             transferCount: transfers.length,
             category,
-            hasAppMetadata: !!appMetadata
+            hasAppMetadata: !!appMetadata,
           });
         } else {
           // Update existing transaction with enhanced data
@@ -1353,21 +1372,20 @@ export class CryptoJobProcessor {
               category: txData.category,
               tags: txData.tags,
               notes: txData.notes,
-              updatedAt: new Date()
-            }
+              updatedAt: new Date(),
+            },
           });
           duplicateCount++;
-          
+
           logger.debug('Updated existing transaction with enhanced data', {
             walletId: walletId.substring(0, 8) + '...',
             context: context?.jobId,
             hash: hash.substring(0, 10) + '...',
             status: txData.status,
             valueUsd: txData.valueUsd,
-            category: txData.category
+            category: txData.category,
           });
         }
-
       } catch (error) {
         errorCount++;
         logger.warn('Error processing individual transaction', {
@@ -1376,11 +1394,11 @@ export class CryptoJobProcessor {
           error: error instanceof Error ? error.message : String(error),
           txHash: tx.attributes?.hash,
           txId: tx.id,
-          operationType: tx.attributes?.operation_type
+          operationType: tx.attributes?.operation_type,
         });
       }
     }
-    
+
     logger.info('Transaction processing completed with enhanced schema', {
       walletId,
       context: context?.jobId,
@@ -1389,11 +1407,18 @@ export class CryptoJobProcessor {
       duplicateCount,
       errorCount,
       skippedCount,
-      successRate: transactions.length > 0 ? (processedCount / (transactions.length - skippedCount) * 100).toFixed(1) : '0'
+      successRate:
+        transactions.length > 0
+          ? ((processedCount / (transactions.length - skippedCount)) * 100).toFixed(1)
+          : '0',
     });
   }
 
-  private async processPnLData(walletId: string, pnlData: any, _context?: JobContext): Promise<void> {
+  private async processPnLData(
+    walletId: string,
+    pnlData: any,
+    _context?: JobContext
+  ): Promise<void> {
     // Process P&L data - implementation depends on Zerion API response structure
     logger.debug(`Processing P&L data for wallet ${walletId}`, pnlData);
     // Implementation would go here based on actual P&L data structure
@@ -1410,14 +1435,14 @@ export class CryptoJobProcessor {
       jobType,
       startTime: Date.now(),
       userId: (job.data as any).userId,
-      walletId: (job.data as any).walletId
+      walletId: (job.data as any).walletId,
     };
   }
 
   private canProcessJob(jobId: string, jobType: string): boolean {
     const memoryUsage = process.memoryUsage();
     const currentMemory = memoryUsage.heapUsed;
-    
+
     // Check memory threshold
     if (currentMemory > this.memoryThreshold) {
       logger.warn('Memory threshold exceeded, rejecting new jobs', {
@@ -1425,11 +1450,11 @@ export class CryptoJobProcessor {
         thresholdMB: Math.round(this.memoryThreshold / 1024 / 1024),
         activeJobs: this.activeJobs.size,
         rejectedJobId: jobId,
-        jobType
+        jobType,
       });
       return false;
     }
-    
+
     // Check concurrent job limit
     if (this.activeJobs.size >= this.maxConcurrentJobs) {
       logger.warn('Maximum concurrent jobs limit reached', {
@@ -1437,28 +1462,34 @@ export class CryptoJobProcessor {
         maxConcurrentJobs: this.maxConcurrentJobs,
         rejectedJobId: jobId,
         jobType,
-        activeJobTypes: Array.from(this.activeJobs.values()).map(ctx => ctx.jobType)
+        activeJobTypes: Array.from(this.activeJobs.values()).map((ctx) => ctx.jobType),
       });
       return false;
     }
-    
+
     // Check job type health score
     const healthScore = this.jobHealthMetrics.get(jobType) || 1.0;
     if (healthScore < 0.3) {
       logger.warn('Job type health score too low, rejecting job', {
         jobType,
         healthScore,
-        rejectedJobId: jobId
+        rejectedJobId: jobId,
       });
       return false;
     }
-    
+
     return true;
   }
 
-  private async getWalletWithRetry(walletId: string, userId: string, context: JobContext, retries = 3, _tx?: any): Promise<any> {
+  private async getWalletWithRetry(
+    walletId: string,
+    userId: string,
+    context: JobContext,
+    retries = 3,
+    _tx?: any
+  ): Promise<any> {
     let lastError: any;
-    
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         logger.debug('Attempting to fetch wallet', {
@@ -1466,15 +1497,15 @@ export class CryptoJobProcessor {
           attempt,
           maxRetries: retries,
           walletId: walletId.substring(0, 8) + '...',
-          userId: userId.substring(0, 8) + '...'
+          userId: userId.substring(0, 8) + '...',
         });
-        
+
         const prismaClient = _tx || prisma;
         const wallet = await prismaClient.cryptoWallet.findFirst({
           where: { id: walletId, userId },
           include: {
             assets: { take: 1 }, // Include one asset to check if wallet has data
-          }
+          },
         });
 
         if (!wallet) {
@@ -1486,134 +1517,143 @@ export class CryptoJobProcessor {
           logger.error('Wallet not found', { ...context, walletId, userId });
           throw error;
         }
-        
+
         logger.debug('Successfully fetched wallet', {
           ...context,
           attempt,
           walletAddress: this.maskAddress(wallet.address),
-          hasAssets: wallet.assets.length > 0
+          hasAssets: wallet.assets.length > 0,
         });
 
         return wallet;
       } catch (error) {
         lastError = error;
-        
+
         if (attempt === retries) {
           logger.error('All wallet fetch attempts failed', {
             ...context,
             attempts: retries,
-            finalError: error instanceof Error ? error.message : String(error)
+            finalError: error instanceof Error ? error.message : String(error),
           });
           throw error;
         }
-        
+
         const delay = 1000 * attempt + Math.random() * 500; // Add jitter
         logger.warn('Wallet fetch attempt failed, retrying', {
           ...context,
           attempt,
           error: error instanceof Error ? error.message : String(error),
-          nextRetryDelayMs: delay
+          nextRetryDelayMs: delay,
         });
-        
+
         await this.sleep(delay);
       }
     }
-    
+
     throw lastError;
   }
 
-  private async updateWalletStatus(walletId: string, status: string, context: JobContext, tx?: any): Promise<void> {
+  private async updateWalletStatus(
+    walletId: string,
+    status: string,
+    context: JobContext,
+    tx?: any
+  ): Promise<void> {
     try {
       logger.debug('Updating wallet status', {
         ...context,
         walletId: walletId.substring(0, 8) + '...',
         status,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
-      
+
       const prismaClient = tx || prisma;
       const updateData: any = {
         syncStatus: status,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
-      
+
       if (status === 'COMPLETED') {
         updateData.lastSyncAt = new Date();
       } else if (status === 'FAILED') {
         updateData.lastSyncError = `Job ${context.jobId} failed at ${new Date().toISOString()}`;
       }
-      
+
       await prismaClient.cryptoWallet.update({
         where: { id: walletId },
-        data: updateData
+        data: updateData,
       });
-      
+
       logger.debug('Successfully updated wallet status', {
         ...context,
         walletId: walletId.substring(0, 8) + '...',
         status,
-        updatedFields: Object.keys(updateData)
+        updatedFields: Object.keys(updateData),
       });
-      
     } catch (error) {
       logger.error('Failed to update wallet status', {
         ...context,
         walletId: walletId.substring(0, 8) + '...',
         status,
         error: error instanceof Error ? error.message : String(error),
-        errorCode: (error as any)?.code
+        errorCode: (error as any)?.code,
       });
       throw error;
     }
   }
 
-
-  private async upsertPosition(walletId: string, assetId: string, positionData: any, context?: JobContext, tx?: any): Promise<void> {
+  private async upsertPosition(
+    walletId: string,
+    assetId: string,
+    positionData: any,
+    context?: JobContext,
+    tx?: any
+  ): Promise<void> {
     try {
       const prismaClient = tx || prisma;
-      
+
       logger.debug('Upserting position', {
         walletId: walletId.substring(0, 8) + '...',
         assetId: assetId.substring(0, 8) + '...',
         context: context?.jobId,
         balance: positionData.balance,
-        balanceUsd: positionData.balanceUsd
+        balanceUsd: positionData.balanceUsd,
       });
-      
+
       // Find existing position first
       const existingPosition = await prismaClient.cryptoPosition.findFirst({
         where: {
           walletId: walletId,
-          assetId: assetId
-        }
+          assetId: assetId,
+        },
       });
 
       if (existingPosition) {
         // Update existing position
         await prismaClient.cryptoPosition.update({
           where: { id: existingPosition.id },
-          data: { 
-            ...positionData, 
-            updatedAt: new Date() 
-          }
+          data: {
+            ...positionData,
+            updatedAt: new Date(),
+          },
         });
       } else {
         // Create new position
         await prismaClient.cryptoPosition.create({
-          data: { 
-            walletId, 
-            assetId, 
+          data: {
+            walletId,
+            assetId,
             ...positionData,
             createdAt: new Date(),
-            updatedAt: new Date()
-          }
+            updatedAt: new Date(),
+          },
         });
       }
-      
+
       logger.debug('Successfully upserted position', {
         walletId: walletId.substring(0, 8) + '...',
         assetId: assetId.substring(0, 8) + '...',
-        context: context?.jobId
+        context: context?.jobId,
       });
     } catch (error) {
       logger.error('Failed to upsert position', {
@@ -1621,7 +1661,7 @@ export class CryptoJobProcessor {
         context: context?.jobId,
         assetId: assetId.substring(0, 8) + '...',
         error: error instanceof Error ? error.message : String(error),
-        positionData
+        positionData,
       });
       throw error;
     }
@@ -1633,28 +1673,30 @@ export class CryptoJobProcessor {
       stats.totalProcessed++;
       stats.successful++;
       stats.lastProcessedAt = new Date();
-      
+
       const processingTime = Date.now() - context.startTime;
       const currentMemory = process.memoryUsage().heapUsed;
-      
+
       // Update processing time with exponential moving average
       const alpha = 0.1;
-      stats.averageProcessingTime = stats.totalProcessed === 1 
-        ? processingTime
-        : alpha * processingTime + (1 - alpha) * stats.averageProcessingTime;
-      
+      stats.averageProcessingTime =
+        stats.totalProcessed === 1
+          ? processingTime
+          : alpha * processingTime + (1 - alpha) * stats.averageProcessingTime;
+
       // Update memory usage statistics
       stats.peakMemoryUsage = Math.max(stats.peakMemoryUsage, currentMemory);
-      stats.averageMemoryUsage = stats.totalProcessed === 1
-        ? currentMemory
-        : alpha * currentMemory + (1 - alpha) * stats.averageMemoryUsage;
-      
+      stats.averageMemoryUsage =
+        stats.totalProcessed === 1
+          ? currentMemory
+          : alpha * currentMemory + (1 - alpha) * stats.averageMemoryUsage;
+
       logger.debug('Recorded job success', {
         ...context,
         processingTimeMs: processingTime,
         memoryUsageMB: Math.round(currentMemory / 1024 / 1024),
         totalProcessed: stats.totalProcessed,
-        successRate: stats.successful / stats.totalProcessed
+        successRate: stats.successful / stats.totalProcessed,
       });
     }
   }
@@ -1665,17 +1707,17 @@ export class CryptoJobProcessor {
       stats.totalProcessed++;
       stats.failed++;
       stats.lastProcessedAt = new Date();
-      
+
       // Track error breakdown
       const errorCode = (error as any)?.code || 'UNKNOWN_ERROR';
       stats.errorBreakdown[errorCode] = (stats.errorBreakdown[errorCode] || 0) + 1;
-      
+
       const processingTime = Date.now() - context.startTime;
       const currentMemory = process.memoryUsage().heapUsed;
-      
+
       // Update memory statistics even for failures
       stats.peakMemoryUsage = Math.max(stats.peakMemoryUsage, currentMemory);
-      
+
       logger.warn('Recorded job failure', {
         ...context,
         errorCode,
@@ -1683,7 +1725,7 @@ export class CryptoJobProcessor {
         memoryUsageMB: Math.round(currentMemory / 1024 / 1024),
         totalProcessed: stats.totalProcessed,
         failureRate: stats.failed / stats.totalProcessed,
-        errorBreakdown: stats.errorBreakdown
+        errorBreakdown: stats.errorBreakdown,
       });
     }
   }
@@ -1693,7 +1735,7 @@ export class CryptoJobProcessor {
       errorMessage: error instanceof Error ? error.message : String(error),
       errorCode: (error as any)?.code,
       errorType: error.constructor.name,
-      statusCode: (error as any)?.statusCode || (error as any)?.response?.status
+      statusCode: (error as any)?.statusCode || (error as any)?.response?.status,
     };
   }
 
@@ -1708,33 +1750,32 @@ export class CryptoJobProcessor {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private extractItemCount(result: any): number {
     try {
       if (!result) return 0;
-      
+
       // Handle different response structures
       if (Array.isArray(result)) return result.length;
       if (result.data && Array.isArray(result.data)) return result.data.length;
       if (result.data && result.data.length !== undefined) return result.data.length;
       if (result.items && Array.isArray(result.items)) return result.items.length;
       if (result.results && Array.isArray(result.results)) return result.results.length;
-      
+
       // For portfolio responses, count positions
       if (result.data && result.data.attributes && result.data.attributes.positions_distribution) {
         const positions = result.data.attributes.positions_distribution.data;
         return Array.isArray(positions) ? positions.length : 0;
       }
-      
+
       // If we can't determine count, return 1 to indicate we got some data
       return typeof result === 'object' ? 1 : 0;
     } catch (error) {
       return 0;
     }
   }
-
 
   // Public methods
   getJobStats(): Map<string, JobStats> {
@@ -1746,21 +1787,27 @@ export class CryptoJobProcessor {
   }
 
   // New utility methods for enhanced functionality
-  private async executeWithTransaction<T>(operation: (tx: any) => Promise<T>, operationName: string): Promise<T> {
+  private async executeWithTransaction<T>(
+    operation: (tx: any) => Promise<T>,
+    operationName: string
+  ): Promise<T> {
     try {
-      return await prisma.$transaction(async (tx) => {
-        logger.debug('Starting database transaction', { operationName });
-        const result = await operation(tx);
-        logger.debug('Database transaction completed successfully', { operationName });
-        return result;
-      }, {
-        maxWait: 10000, // 10 seconds
-        timeout: 30000, // 30 seconds
-      });
+      return await prisma.$transaction(
+        async (tx) => {
+          logger.debug('Starting database transaction', { operationName });
+          const result = await operation(tx);
+          logger.debug('Database transaction completed successfully', { operationName });
+          return result;
+        },
+        {
+          maxWait: 10000, // 10 seconds
+          timeout: 30000, // 30 seconds
+        }
+      );
     } catch (error) {
       logger.error('Database transaction failed', {
         operationName,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -1768,7 +1815,7 @@ export class CryptoJobProcessor {
 
   private async validateJobInputs(data: any, jobType: string): Promise<void> {
     const errors: string[] = [];
-    
+
     if (jobType === 'SYNC_WALLET') {
       if (!data.userId || typeof data.userId !== 'string') {
         errors.push('Invalid or missing userId');
@@ -1777,28 +1824,25 @@ export class CryptoJobProcessor {
         errors.push('Invalid or missing walletId');
       }
     }
-    
+
     if (errors.length > 0) {
       const errorMessage = `Job validation failed: ${errors.join(', ')}`;
       logger.error('Job input validation failed', { jobType, errors, data });
-      throw new CryptoServiceError(
-        errorMessage,
-        CryptoErrorCodes.INVALID_PARAMETERS,
-        400
-      );
+      throw new CryptoServiceError(errorMessage, CryptoErrorCodes.INVALID_PARAMETERS, 400);
     }
   }
 
   private async checkMemoryUsage(context: JobContext, initialMemory: number): Promise<void> {
     const currentMemory = process.memoryUsage().heapUsed;
     const memoryDelta = currentMemory - initialMemory;
-    
-    if (memoryDelta > 100 * 1024 * 1024) { // 100MB increase
+
+    if (memoryDelta > 100 * 1024 * 1024) {
+      // 100MB increase
       logger.warn('Significant memory increase detected during job processing', {
         ...context,
         initialMemoryMB: Math.round(initialMemory / 1024 / 1024),
         currentMemoryMB: Math.round(currentMemory / 1024 / 1024),
-        memoryDeltaMB: Math.round(memoryDelta / 1024 / 1024)
+        memoryDeltaMB: Math.round(memoryDelta / 1024 / 1024),
       });
     }
   }
@@ -1809,7 +1853,7 @@ export class CryptoJobProcessor {
       errorType,
       error: error instanceof Error ? error.message : String(error),
       errorCode: (error as any)?.code,
-      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3) : undefined
+      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3) : undefined,
     });
   }
 
@@ -1817,7 +1861,7 @@ export class CryptoJobProcessor {
     const memoryUsage = process.memoryUsage();
     const memoryMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
     const thresholdMB = Math.round(this.memoryThreshold / 1024 / 1024);
-    
+
     if (memoryMB > thresholdMB * 0.8) {
       logger.warn('High memory usage detected', {
         currentMemoryMB: memoryMB,
@@ -1825,7 +1869,7 @@ export class CryptoJobProcessor {
         utilizationPercent: Math.round((memoryMB / thresholdMB) * 100),
         activeJobs: this.activeJobs.size,
         heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
-        external: Math.round(memoryUsage.external / 1024 / 1024)
+        external: Math.round(memoryUsage.external / 1024 / 1024),
       });
     }
   }
@@ -1833,14 +1877,14 @@ export class CryptoJobProcessor {
   private cleanupStaleJobs(): void {
     const now = Date.now();
     const staleThreshold = 30 * 60 * 1000; // 30 minutes
-    
+
     for (const [jobId, context] of this.activeJobs.entries()) {
       if (now - context.startTime > staleThreshold) {
         logger.warn('Removing stale job from active jobs', {
           jobId,
           jobType: context.jobType,
           ageMs: now - context.startTime,
-          thresholdMs: staleThreshold
+          thresholdMs: staleThreshold,
         });
         this.activeJobs.delete(jobId);
       }
@@ -1852,14 +1896,14 @@ export class CryptoJobProcessor {
     const alpha = 0.1; // Weight for new data
     const newValue = success ? 1.0 : 0.0;
     const newHealth = alpha * newValue + (1 - alpha) * currentHealth;
-    
+
     this.jobHealthMetrics.set(jobType, newHealth);
-    
+
     if (newHealth < 0.5) {
       logger.warn('Job type health score declining', {
         jobType,
         healthScore: newHealth,
-        recentSuccess: success
+        recentSuccess: success,
       });
     }
   }
@@ -1867,7 +1911,7 @@ export class CryptoJobProcessor {
   // Enhanced metrics and monitoring
   getEnhancedJobStats(): {
     stats: Map<string, JobStats>;
-    activeJobs: Array<{jobId: string; jobType: string; ageMs: number}>;
+    activeJobs: Array<{ jobId: string; jobType: string; ageMs: number }>;
     healthMetrics: Record<string, number>;
     memoryUsage: NodeJS.MemoryUsage;
     systemMetrics: {
@@ -1880,9 +1924,9 @@ export class CryptoJobProcessor {
     const activeJobsInfo = Array.from(this.activeJobs.entries()).map(([jobId, context]) => ({
       jobId,
       jobType: context.jobType,
-      ageMs: now - context.startTime
+      ageMs: now - context.startTime,
     }));
-    
+
     return {
       stats: new Map(this.stats),
       activeJobs: activeJobsInfo,
@@ -1891,46 +1935,50 @@ export class CryptoJobProcessor {
       systemMetrics: {
         memoryThresholdMB: Math.round(this.memoryThreshold / 1024 / 1024),
         maxConcurrentJobs: this.maxConcurrentJobs,
-        currentActiveJobs: this.activeJobs.size
-      }
+        currentActiveJobs: this.activeJobs.size,
+      },
     };
   }
 
   private async calculatePortfolioValue(wallets: any[]): Promise<number> {
     let totalValue = 0;
-    
+
     for (const wallet of wallets) {
       try {
         const positions = await prisma.cryptoPosition.findMany({
-          where: { walletId: wallet.id }
+          where: { walletId: wallet.id },
         });
-        
+
         const walletValue = positions.reduce((sum, pos) => {
           const positionValue = pos.balanceUsd.toNumber();
           return sum + (isFinite(positionValue) ? positionValue : 0);
         }, 0);
-        
+
         totalValue += walletValue;
       } catch (error) {
         logger.warn('Error calculating value for wallet', { walletId: wallet.id, error });
       }
     }
-    
+
     return totalValue;
   }
 
-  private async createPortfolioSnapshot(userId: string, walletId: string | undefined, portfolioValue: number): Promise<void> {
+  private async createPortfolioSnapshot(
+    userId: string,
+    walletId: string | undefined,
+    portfolioValue: number
+  ): Promise<void> {
     const snapshotData = {
       totalValue: portfolioValue,
       assetCount: 0, // Would calculate actual asset count
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     // For now, just log the snapshot data - would need to implement snapshot model
     logger.info(`Portfolio snapshot created for user ${userId}`, {
       walletId,
       portfolioValue,
-      snapshotData
+      snapshotData,
     });
   }
 
@@ -1939,7 +1987,7 @@ export class CryptoJobProcessor {
     return {
       totalValue: 0,
       assetCount: 0,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   }
 
@@ -1957,23 +2005,23 @@ export class CryptoJobProcessor {
   //     'solana': 'SOLANA',
   //     'bitcoin': 'BITCOIN',
   //   };
-  //   
+  //
   //   return networkMap[zerionNetwork] || 'ETHEREUM';
   // }
 
   private mapChainIdToNetwork(chainId: string): any {
     const chainIdMap: Record<string, string> = {
-      'ethereum': 'ETHEREUM',
-      'polygon': 'POLYGON',
+      ethereum: 'ETHEREUM',
+      polygon: 'POLYGON',
       'binance-smart-chain': 'BSC',
-      'bsc': 'BSC',
+      bsc: 'BSC',
       'arbitrum-one': 'ARBITRUM',
-      'arbitrum': 'ARBITRUM',
-      'optimism': 'OPTIMISM',
-      'avalanche': 'AVALANCHE',
-      'base': 'BASE',
-      'solana': 'SOLANA',
-      'bitcoin': 'BITCOIN',
+      arbitrum: 'ARBITRUM',
+      optimism: 'OPTIMISM',
+      avalanche: 'AVALANCHE',
+      base: 'BASE',
+      solana: 'SOLANA',
+      bitcoin: 'BITCOIN',
       // Numeric chain IDs
       '1': 'ETHEREUM',
       '137': 'POLYGON',
@@ -1983,7 +2031,7 @@ export class CryptoJobProcessor {
       '43114': 'AVALANCHE',
       '8453': 'BASE',
     };
-    
+
     return chainIdMap[chainId.toLowerCase()] || 'ETHEREUM';
   }
 
@@ -1997,10 +2045,14 @@ export class CryptoJobProcessor {
 
   private mapTransactionStatus(status: string): TransactionStatus {
     switch (status?.toLowerCase()) {
-      case 'confirmed': return TransactionStatus.CONFIRMED;
-      case 'failed': return TransactionStatus.FAILED;
-      case 'pending': return TransactionStatus.PENDING;
-      default: return TransactionStatus.PENDING;
+      case 'confirmed':
+        return TransactionStatus.CONFIRMED;
+      case 'failed':
+        return TransactionStatus.FAILED;
+      case 'pending':
+        return TransactionStatus.PENDING;
+      default:
+        return TransactionStatus.PENDING;
     }
   }
 
@@ -2008,18 +2060,21 @@ export class CryptoJobProcessor {
   // private determineTransactionType(attributes: any): TransactionType {
   //   const transfers = attributes.transfers || [];
   //   if (transfers.length === 0) return TransactionType.CONTRACT_INTERACTION;
-  //   
+  //
   //   const hasReceive = transfers.some((t: any) => t.type === 'receive');
   //   const hasSend = transfers.some((t: any) => t.type === 'send');
-  //   
+  //
   //   if (hasReceive && hasSend) return TransactionType.SWAP;
   //   if (hasReceive) return TransactionType.RECEIVE;
   //   if (hasSend) return TransactionType.SEND;
-  //   
+  //
   //   return TransactionType.CONTRACT_INTERACTION;
   // }
 
-  private determineTransactionTypeFromAttributes(attributes: any, operationType?: string): TransactionType {
+  private determineTransactionTypeFromAttributes(
+    attributes: any,
+    operationType?: string
+  ): TransactionType {
     // Use operation_type if available for more accurate categorization
     if (operationType) {
       switch (operationType.toLowerCase()) {
@@ -2057,16 +2112,19 @@ export class CryptoJobProcessor {
     // Check for NFT transfers
     const transfers = attributes.transfers || [];
     const hasNFTTransfer = transfers.some((t: any) => t.nft_info);
-    
+
     if (hasNFTTransfer) {
       // Determine if it's mint, burn or transfer based on addresses
-      const hasZeroAddress = transfers.some((t: any) => 
-        t.sender === '0x0000000000000000000000000000000000000000' ||
-        t.recipient === '0x0000000000000000000000000000000000000000'
+      const hasZeroAddress = transfers.some(
+        (t: any) =>
+          t.sender === '0x0000000000000000000000000000000000000000' ||
+          t.recipient === '0x0000000000000000000000000000000000000000'
       );
-      
+
       if (hasZeroAddress) {
-        const isMint = transfers.some((t: any) => t.sender === '0x0000000000000000000000000000000000000000');
+        const isMint = transfers.some(
+          (t: any) => t.sender === '0x0000000000000000000000000000000000000000'
+        );
         return isMint ? TransactionType.NFT_MINT : TransactionType.NFT_BURN;
       }
       return TransactionType.NFT_TRANSFER;
@@ -2095,16 +2153,16 @@ export class CryptoJobProcessor {
       // Fallback to operation type
       if (operationType) {
         const categoryMap: Record<string, string> = {
-          'trade': 'DEX',
-          'swap': 'DEX',
-          'stake': 'DeFi',
-          'unstake': 'DeFi',
-          'deposit': 'DeFi',
-          'withdraw': 'DeFi',
-          'borrow': 'DeFi',
-          'repay': 'DeFi',
-          'mint': 'DeFi',
-          'burn': 'DeFi'
+          trade: 'DEX',
+          swap: 'DEX',
+          stake: 'DeFi',
+          unstake: 'DeFi',
+          deposit: 'DeFi',
+          withdraw: 'DeFi',
+          borrow: 'DeFi',
+          repay: 'DeFi',
+          mint: 'DeFi',
+          burn: 'DeFi',
         };
         return categoryMap[operationType.toLowerCase()] || null;
       }
@@ -2115,23 +2173,29 @@ export class CryptoJobProcessor {
     for (const act of acts) {
       const actType = act.type?.toLowerCase();
       const appName = act.application_metadata?.name?.toLowerCase();
-      
+
       // Check for DeFi protocols
       if (appName) {
-        if (['uniswap', 'sushiswap', 'pancakeswap', '1inch', 'dex'].some(dex => appName.includes(dex))) {
+        if (
+          ['uniswap', 'sushiswap', 'pancakeswap', '1inch', 'dex'].some((dex) =>
+            appName.includes(dex)
+          )
+        ) {
           return 'DEX';
         }
-        if (['aave', 'compound', 'maker', 'yearn', 'curve'].some(defi => appName.includes(defi))) {
+        if (
+          ['aave', 'compound', 'maker', 'yearn', 'curve'].some((defi) => appName.includes(defi))
+        ) {
           return 'DeFi';
         }
-        if (['opensea', 'blur', 'looksrare', 'nft'].some(nft => appName.includes(nft))) {
+        if (['opensea', 'blur', 'looksrare', 'nft'].some((nft) => appName.includes(nft))) {
           return 'NFT';
         }
-        if (['ethereum name service', 'ens'].some(ens => appName.includes(ens))) {
+        if (['ethereum name service', 'ens'].some((ens) => appName.includes(ens))) {
           return 'Domain';
         }
       }
-      
+
       // Check by act type
       switch (actType) {
         case 'trade':
@@ -2144,7 +2208,9 @@ export class CryptoJobProcessor {
           return 'DeFi';
         case 'mint':
         case 'burn':
-          return acts.some(a => a.application_metadata?.name?.toLowerCase().includes('nft')) ? 'NFT' : 'DeFi';
+          return acts.some((a) => a.application_metadata?.name?.toLowerCase().includes('nft'))
+            ? 'NFT'
+            : 'DeFi';
         default:
           break;
       }
@@ -2155,21 +2221,22 @@ export class CryptoJobProcessor {
 
   private generateTagsFromTransaction(attributes: any, acts: any[]): string[] {
     const tags: string[] = [];
-    
+
     // Add operation type as tag
     if (attributes.operation_type) {
       tags.push(attributes.operation_type.toLowerCase());
     }
-    
+
     // Add tags from acts
     for (const act of acts) {
       if (act.type) {
         tags.push(act.type.toLowerCase());
       }
-      
+
       // Add application name as tag
       if (act.application_metadata?.name) {
-        const appName = act.application_metadata.name.toLowerCase()
+        const appName = act.application_metadata.name
+          .toLowerCase()
           .replace(/[^a-z0-9]/g, '_')
           .replace(/_+/g, '_')
           .replace(/^_|_$/g, '');
@@ -2178,81 +2245,89 @@ export class CryptoJobProcessor {
         }
       }
     }
-    
+
     // Add transfer-based tags
     const transfers = attributes.transfers || [];
     const hasNFT = transfers.some((t: any) => t.nft_info);
-    const hasMultipleAssets = new Set(transfers.map((t: any) => 
-      t.fungible_info?.symbol || t.nft_info?.contract_address
-    )).size > 1;
-    
+    const hasMultipleAssets =
+      new Set(transfers.map((t: any) => t.fungible_info?.symbol || t.nft_info?.contract_address))
+        .size > 1;
+
     if (hasNFT) tags.push('nft');
     if (hasMultipleAssets) tags.push('multi_asset');
     if (transfers.length > 2) tags.push('complex');
-    
+
     // Add special flags
     if (attributes.flags?.is_trash) tags.push('spam');
-    
+
     // Remove duplicates and limit to reasonable number
     return [...new Set(tags)].slice(0, 10);
   }
 
   private generateTransactionNotes(attributes: any, appMetadata?: any): string | null {
     const notes: string[] = [];
-    
+
     // Add application information
     if (appMetadata?.name) {
       notes.push(`Application: ${appMetadata.name}`);
     }
-    
+
     // Add method information
     if (appMetadata?.method?.name) {
       notes.push(`Method: ${appMetadata.method.name}`);
     }
-    
+
     // Add transfer summary for complex transactions
     const transfers = attributes.transfers || [];
     if (transfers.length > 1) {
-      const transferSummary = transfers.map((t: any, index: number) => {
-        const asset = t.fungible_info?.symbol || t.nft_info?.name || 'Unknown';
-        const direction = t.direction;
-        const value = t.quantity?.numeric || 'unknown';
-        return `${index + 1}. ${direction}: ${value} ${asset}`;
-      }).join('; ');
-      
-      if (transferSummary.length < 500) { // Avoid too long notes
+      const transferSummary = transfers
+        .map((t: any, index: number) => {
+          const asset = t.fungible_info?.symbol || t.nft_info?.name || 'Unknown';
+          const direction = t.direction;
+          const value = t.quantity?.numeric || 'unknown';
+          return `${index + 1}. ${direction}: ${value} ${asset}`;
+        })
+        .join('; ');
+
+      if (transferSummary.length < 500) {
+        // Avoid too long notes
         notes.push(`Transfers: ${transferSummary}`);
       } else {
         notes.push(`Complex transaction with ${transfers.length} transfers`);
       }
     }
-    
+
     // Add approval information
     const approvals = attributes.approvals || [];
     if (approvals.length > 0) {
       notes.push(`Approvals: ${approvals.length} token approval(s)`);
     }
-    
+
     const collectionApprovals = attributes.collection_approvals || [];
     if (collectionApprovals.length > 0) {
       notes.push(`Collection Approvals: ${collectionApprovals.length} NFT collection approval(s)`);
     }
-    
+
     return notes.length > 0 ? notes.join(' | ') : null;
   }
 
   // Temporary fallback method during migration
-  private async findOrCreateAssetFallback(walletId: string, assetData: any, context?: JobContext, tx?: any): Promise<any> {
+  private async findOrCreateAssetFallback(
+    walletId: string,
+    assetData: any,
+    context?: JobContext,
+    tx?: any
+  ): Promise<any> {
     try {
       const prismaClient = tx || prisma;
-      
+
       // @ts-ignore - Using old crypto_assets table during migration
       let asset = await prismaClient.crypto_assets.findFirst({
         where: {
           symbol: assetData.symbol,
           network: assetData.network,
-          contractAddress: assetData.contractAddress
-        }
+          contractAddress: assetData.contractAddress,
+        },
       });
 
       if (!asset) {
@@ -2260,17 +2335,17 @@ export class CryptoJobProcessor {
           walletId: walletId.substring(0, 8) + '...',
           context: context?.jobId,
           symbol: assetData.symbol,
-          network: assetData.network
+          network: assetData.network,
         });
-        
+
         // @ts-ignore - Using old crypto_assets table during migration
         asset = await prismaClient.crypto_assets.create({
           data: {
             ...assetData,
             type: assetData.type || this.determineAssetType({ symbol: assetData.symbol }),
             priceUsd: 0,
-            walletId: walletId
-          }
+            walletId: walletId,
+          },
         });
       }
 
@@ -2282,9 +2357,9 @@ export class CryptoJobProcessor {
         assetData: {
           symbol: assetData.symbol,
           network: assetData.network,
-          contractAddress: assetData.contractAddress
+          contractAddress: assetData.contractAddress,
         },
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       return null;
     }
@@ -2297,11 +2372,11 @@ export class CryptoJobProcessor {
 
 export function initializeCryptoWorkers(): void {
   const processor = CryptoJobProcessor.getInstance();
-  
+
   // Check if Redis connection is configured
   const redisUrl = process.env['REDIS_URL'];
   const redisHost = process.env['REDIS_HOST'];
-  
+
   if (!redisUrl && !redisHost) {
     logger.warn('Redis not configured - crypto workers will not be initialized');
     return;
@@ -2391,12 +2466,12 @@ export function initializeCryptoWorkers(): void {
       syncWorkerConcurrency: 3,
       analyticsWorkerConcurrency: 2,
       rateLimitMax: 8,
-      rateLimitDuration: 60000
+      rateLimitDuration: 60000,
     });
   } catch (error) {
     logger.error('Failed to initialize crypto workers', {
       error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined,
     });
     throw error;
   }

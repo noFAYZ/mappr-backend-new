@@ -16,6 +16,40 @@ const swaggerDefinition = {
       url: 'https://opensource.org/licenses/MIT',
     },
   },
+  tags: [
+    {
+      name: 'Authentication',
+      description: 'User authentication and authorization endpoints'
+    },
+    {
+      name: 'Users',
+      description: 'User profile and account management'
+    },
+    {
+      name: 'Account Groups',
+      description: 'Organization and categorization of financial accounts and crypto wallets'
+    },
+    {
+      name: 'Financial Accounts',
+      description: 'Traditional bank accounts and financial institutions'
+    },
+    {
+      name: 'Crypto Wallets',
+      description: 'Cryptocurrency wallets and blockchain assets'
+    },
+    {
+      name: 'Subscriptions',
+      description: 'Plan management and billing'
+    },
+    {
+      name: 'Payments',
+      description: 'Payment processing and history'
+    },
+    {
+      name: 'Usage',
+      description: 'Usage tracking and limits'
+    }
+  ],
   servers: [
     {
       url: `http://localhost:${config.port}`,
@@ -899,6 +933,316 @@ const swaggerDefinition = {
           },
         },
         required: ['protocol', 'total_usd_value'],
+      },
+      // Account Groups schemas
+      AccountGroup: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'Account group unique identifier',
+            example: 'clm123abc456def789',
+          },
+          userId: {
+            type: 'string',
+            description: 'User ID who owns the group',
+            example: 'clm123abc456def789',
+          },
+          name: {
+            type: 'string',
+            description: 'Group name',
+            example: 'Personal Banking',
+            maxLength: 100,
+          },
+          description: {
+            type: 'string',
+            nullable: true,
+            description: 'Group description',
+            example: 'Personal checking and savings accounts',
+            maxLength: 500,
+          },
+          icon: {
+            type: 'string',
+            nullable: true,
+            description: 'Group icon (emoji or unicode)',
+            example: '🏦',
+            maxLength: 50,
+          },
+          color: {
+            type: 'string',
+            nullable: true,
+            description: 'Group color (hex code)',
+            example: '#3B82F6',
+            pattern: '^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$',
+          },
+          sortOrder: {
+            type: 'integer',
+            description: 'Sort order for display',
+            example: 0,
+            minimum: 0,
+          },
+          parentId: {
+            type: 'string',
+            nullable: true,
+            description: 'Parent group ID for hierarchical structure',
+            example: 'clm123parent456def',
+          },
+          isDefault: {
+            type: 'boolean',
+            description: 'Whether this is a system default group',
+            example: false,
+          },
+          createdAt: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Creation timestamp',
+          },
+          updatedAt: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Last update timestamp',
+          },
+          financialAccounts: {
+            type: 'array',
+            description: 'Financial accounts in this group',
+            items: {
+              $ref: '#/components/schemas/FinancialAccount',
+            },
+          },
+          cryptoWallets: {
+            type: 'array',
+            description: 'Crypto wallets in this group',
+            items: {
+              $ref: '#/components/schemas/CryptoWallet',
+            },
+          },
+          children: {
+            type: 'array',
+            description: 'Child groups (for hierarchical structure)',
+            items: {
+              $ref: '#/components/schemas/AccountGroup',
+            },
+          },
+          _count: {
+            type: 'object',
+            description: 'Count of related entities',
+            properties: {
+              financialAccounts: { type: 'integer' },
+              cryptoWallets: { type: 'integer' },
+              children: { type: 'integer' },
+            },
+          },
+        },
+        required: ['id', 'userId', 'name', 'sortOrder', 'isDefault', 'createdAt', 'updatedAt'],
+      },
+      CreateAccountGroupRequest: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Group name',
+            example: 'Personal Banking',
+            minLength: 1,
+            maxLength: 100,
+          },
+          description: {
+            type: 'string',
+            description: 'Group description (optional)',
+            example: 'Personal checking and savings accounts',
+            maxLength: 500,
+          },
+          icon: {
+            type: 'string',
+            description: 'Group icon (optional)',
+            example: '🏦',
+            maxLength: 50,
+          },
+          color: {
+            type: 'string',
+            description: 'Group color in hex format (optional)',
+            example: '#3B82F6',
+            pattern: '^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$',
+          },
+          parentId: {
+            type: 'string',
+            description: 'Parent group ID (optional)',
+            example: 'clm123parent456def',
+          },
+        },
+        required: ['name'],
+      },
+      UpdateAccountGroupRequest: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Updated group name',
+            example: 'Business Banking',
+            minLength: 1,
+            maxLength: 100,
+          },
+          description: {
+            type: 'string',
+            nullable: true,
+            description: 'Updated group description',
+            example: 'Business accounts and corporate banking',
+            maxLength: 500,
+          },
+          icon: {
+            type: 'string',
+            nullable: true,
+            description: 'Updated group icon',
+            example: '🏢',
+            maxLength: 50,
+          },
+          color: {
+            type: 'string',
+            nullable: true,
+            description: 'Updated group color',
+            example: '#10B981',
+            pattern: '^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$',
+          },
+          parentId: {
+            type: 'string',
+            nullable: true,
+            description: 'Updated parent group ID',
+            example: 'clm123newparent456',
+          },
+          sortOrder: {
+            type: 'integer',
+            description: 'Updated sort order',
+            example: 1,
+            minimum: 0,
+          },
+        },
+      },
+      MoveAccountRequest: {
+        type: 'object',
+        properties: {
+          accountId: {
+            type: 'string',
+            description: 'Account ID to move',
+            example: 'clm123account456def',
+          },
+          groupId: {
+            type: 'string',
+            nullable: true,
+            description: 'Target group ID (null to remove from group)',
+            example: 'clm123group456def',
+          },
+          accountType: {
+            type: 'string',
+            enum: ['financial', 'crypto'],
+            description: 'Type of account to move',
+            example: 'financial',
+          },
+        },
+        required: ['accountId', 'accountType'],
+      },
+      FinancialAccount: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'Account unique identifier',
+            example: 'clm123account456def',
+          },
+          name: {
+            type: 'string',
+            description: 'Account name',
+            example: 'Chase Checking',
+          },
+          type: {
+            type: 'string',
+            enum: ['CHECKING', 'SAVINGS', 'CREDIT_CARD', 'INVESTMENT', 'LOAN', 'MORTGAGE', 'CRYPTO'],
+            description: 'Account type',
+            example: 'CHECKING',
+          },
+          balance: {
+            type: 'number',
+            description: 'Account balance',
+            example: 1250.50,
+          },
+          currency: {
+            type: 'string',
+            description: 'Account currency',
+            example: 'USD',
+          },
+          institutionName: {
+            type: 'string',
+            nullable: true,
+            description: 'Financial institution name',
+            example: 'Chase Bank',
+          },
+          groupId: {
+            type: 'string',
+            nullable: true,
+            description: 'Associated group ID',
+            example: 'clm123group456def',
+          },
+          isActive: {
+            type: 'boolean',
+            description: 'Whether account is active',
+            example: true,
+          },
+          createdAt: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Creation timestamp',
+          },
+        },
+        required: ['id', 'name', 'type', 'balance', 'currency', 'isActive'],
+      },
+      CryptoWallet: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'Wallet unique identifier',
+            example: 'clm123wallet456def',
+          },
+          name: {
+            type: 'string',
+            description: 'Wallet name',
+            example: 'MetaMask Wallet',
+          },
+          address: {
+            type: 'string',
+            description: 'Wallet address',
+            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
+          },
+          network: {
+            $ref: '#/components/schemas/BlockchainNetwork',
+          },
+          type: {
+            type: 'string',
+            enum: ['HOT_WALLET', 'COLD_WALLET', 'EXCHANGE', 'MULTI_SIG', 'SMART_CONTRACT'],
+            description: 'Wallet type',
+            example: 'HOT_WALLET',
+          },
+          totalBalanceUsd: {
+            type: 'number',
+            description: 'Total balance in USD',
+            example: 5000.75,
+          },
+          groupId: {
+            type: 'string',
+            nullable: true,
+            description: 'Associated group ID',
+            example: 'clm123group456def',
+          },
+          isActive: {
+            type: 'boolean',
+            description: 'Whether wallet is active',
+            example: true,
+          },
+          createdAt: {
+            type: 'string',
+            format: 'date-time',
+            description: 'Creation timestamp',
+          },
+        },
+        required: ['id', 'name', 'address', 'network', 'type', 'totalBalanceUsd', 'isActive'],
       },
     },
     responses: {

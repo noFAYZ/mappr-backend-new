@@ -17,6 +17,7 @@ import subscriptionRoutes from '@/routes/subscription';
 import paymentRoutes from '@/routes/payment';
 import usageRoutes from '@/routes/usage';
 import { cryptoRoutes } from '@/routes/crypto';
+import accountGroupRoutes from '@/routes/accountGroups';
 
 const app = express();
 
@@ -103,6 +104,7 @@ app.get('/', (_req, res) => {
     payments: `/api/${config.apiVersion}/payments`,
     usage: `/api/${config.apiVersion}/usage`,
     crypto: `/api/${config.apiVersion}/crypto`,
+    accountGroups: `/api/${config.apiVersion}/account-groups`,
   };
 
   // Add docs link if Swagger is enabled
@@ -159,6 +161,7 @@ app.use(`/api/${config.apiVersion}/subscriptions`, subscriptionRoutes);
 app.use(`/api/${config.apiVersion}/payments`, paymentRoutes);
 app.use(`/api/${config.apiVersion}/usage`, usageRoutes);
 app.use(`/api/${config.apiVersion}/crypto`, cryptoRoutes);
+app.use(`/api/${config.apiVersion}/account-groups`, accountGroupRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);

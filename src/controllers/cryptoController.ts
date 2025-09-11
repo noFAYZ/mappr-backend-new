@@ -9,6 +9,10 @@ import {
   GetWalletTransactionsQuerySchema,
   GetWalletNFTsQuerySchema,
   GetWalletDeFiQuerySchema,
+  GetWalletDetailsFlexibleRequestSchema,
+  GetWalletTransactionsFlexibleRequestSchema,
+  GetWalletNFTsFlexibleRequestSchema,
+  GetWalletDeFiFlexibleRequestSchema,
   PortfolioQuerySchema,
   SyncWalletSchema,
   AnalyticsQuerySchema,
@@ -155,6 +159,33 @@ export class CryptoController {
     }
   }
 
+  async getWalletDetailsFlexible(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate query parameters - accepts both walletId and address
+      const parsed = GetWalletDetailsFlexibleRequestSchema.parse({ query: req.query });
+      const { walletId, address } = parsed.query;
+
+      // Resolve the wallet by ID or address
+      const wallet = await cryptoService.resolveWallet(userId, walletId, address);
+
+      // Get wallet portfolio using the resolved wallet ID
+      const portfolio = await cryptoService.getWalletPortfolio(userId, wallet.id);
+
+      res.json({
+        success: true,
+        data: portfolio,
+        message: 'Wallet portfolio retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
   // ===============================
   // PORTFOLIO DATA
   // ===============================
@@ -205,6 +236,42 @@ export class CryptoController {
       const result = await cryptoService.getWalletTransactions(
         userId,
         walletId,
+        filters,
+        pagination
+      );
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+        message: 'Wallet transactions retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async getWalletTransactionsFlexible(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate query parameters - accepts both walletId and address
+      const parsed = GetWalletTransactionsFlexibleRequestSchema.parse({ query: req.query });
+      const { walletId, address, page, limit, ...filters } = parsed.query;
+
+      // Resolve the wallet by ID or address
+      const wallet = await cryptoService.resolveWallet(userId, walletId, address);
+
+      // Extract pagination and filters
+      const pagination = { page, limit };
+
+      // Get transactions using resolved wallet ID
+      const result = await cryptoService.getWalletTransactions(
+        userId,
+        wallet.id,
         filters,
         pagination
       );
@@ -314,6 +381,37 @@ export class CryptoController {
     }
   }
 
+  async getWalletNFTsFlexible(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate query parameters - accepts both walletId and address
+      const parsed = GetWalletNFTsFlexibleRequestSchema.parse({ query: req.query });
+      const { walletId, address, page, limit, ...filters } = parsed.query;
+
+      // Resolve the wallet by ID or address
+      const wallet = await cryptoService.resolveWallet(userId, walletId, address);
+
+      // Extract pagination and filters
+      const pagination = { page, limit };
+
+      // Get NFTs using resolved wallet ID
+      const result = await cryptoService.getWalletNFTs(userId, wallet.id, filters, pagination);
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+        message: 'Wallet NFTs retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
   async getAllNFTs(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
@@ -393,6 +491,42 @@ export class CryptoController {
       const result = await cryptoService.getWalletDeFiPositions(
         userId,
         walletId,
+        filters,
+        pagination
+      );
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+        message: 'Wallet DeFi positions retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async getWalletDeFiPositionsFlexible(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate query parameters - accepts both walletId and address
+      const parsed = GetWalletDeFiFlexibleRequestSchema.parse({ query: req.query });
+      const { walletId, address, page, limit, ...filters } = parsed.query;
+
+      // Resolve the wallet by ID or address
+      const wallet = await cryptoService.resolveWallet(userId, walletId, address);
+
+      // Extract pagination and filters
+      const pagination = { page, limit };
+
+      // Get DeFi positions using resolved wallet ID
+      const result = await cryptoService.getWalletDeFiPositions(
+        userId,
+        wallet.id,
         filters,
         pagination
       );
@@ -842,8 +976,7 @@ export class CryptoController {
       logger.info(`Zapper wallet data retrieved for user ${userId}`, {
         userId,
         walletId,
-        totalValue: zapperData.portfolioSummary.totalValueUsd,
-        tokenCount: zapperData.portfolioSummary.tokenCount,
+     
       });
 
       res.json({
@@ -856,43 +989,6 @@ export class CryptoController {
     }
   }
 
-  async syncWalletWithZapper(req: Request, res: Response) {
-    try {
-      const userId = req.user?.id;
-      if (!userId) {
-        throw new AppError('User authentication required', 401);
-      }
-
-      // Validate params
-      const { walletId } = WalletParamsSchema.parse(req.params);
-
-      // Parse sync options from body
-      const options = {
-        includeTokens: req.body.includeTokens ?? true,
-        includeAppPositions: req.body.includeAppPositions ?? true,
-        includeNFTs: req.body.includeNFTs ?? true,
-        includeTransactions: req.body.includeTransactions ?? true,
-        networks: req.body.networks,
-      };
-
-      // Sync with Zapper
-      const result = await cryptoService.syncWalletWithZapper(userId, walletId, options);
-
-      logger.info(`Wallet synced with Zapper for user ${userId}`, {
-        userId,
-        walletId,
-        totalValue: result.data.portfolioSummary.totalValueUsd,
-      });
-
-      res.json({
-        success: true,
-        data: result.data,
-        message: result.message,
-      });
-    } catch (error) {
-      this.handleError(error, res);
-    }
-  }
 
   async getZapperFarcasterData(req: Request, res: Response) {
     try {
@@ -954,6 +1050,124 @@ export class CryptoController {
           queues: health.queues,
         },
         message: 'Service health status retrieved',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  // ===============================
+  // UNIFIED PROVIDER METHODS
+  // ===============================
+
+  async getWalletDetailsLive(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+      
+      // Validate query parameters - accepts both walletId and address
+      const parsed = GetWalletDetailsFlexibleRequestSchema.parse({ query: req.query });
+      const { walletId, address } = parsed.query;
+      
+      let walletAddress: string;
+      
+      if (address) {
+        walletAddress = address;
+      } else if (walletId) {
+        // Resolve wallet by ID to get address
+        const wallet = await cryptoService.resolveWallet(userId, walletId);
+        walletAddress = wallet.address;
+      } else {
+        throw new AppError('Either walletId or address must be provided', 400);
+      }
+      
+      // Get live data from external providers using unified method
+      const livePortfolio = await cryptoService.getUnifiedWalletPortfolio(walletAddress);
+      
+      logger.info(`Live wallet portfolio fetched for user ${userId}`, {
+        userId,
+        walletAddress,
+        provider: livePortfolio.provider
+      });
+      
+      res.json({
+        success: true,
+        data: livePortfolio.data,
+        meta: {
+          provider: livePortfolio.provider,
+          live: true,
+          address: walletAddress
+        },
+        message: 'Live wallet portfolio retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async getWalletTransactionsLive(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+      
+      // Validate query parameters
+      const parsed = GetWalletTransactionsFlexibleRequestSchema.parse({ query: req.query });
+      const { walletId, address, limit = 20 } = parsed.query;
+      
+      let walletAddress: string;
+      
+      if (address) {
+        walletAddress = address;
+      } else if (walletId) {
+        // Resolve wallet by ID to get address
+        const wallet = await cryptoService.resolveWallet(userId, walletId);
+        walletAddress = wallet.address;
+      } else {
+        throw new AppError('Either walletId or address must be provided', 400);
+      }
+      
+      // Get live transaction data from external providers
+      const liveTransactions = await cryptoService.getUnifiedWalletTransactions(walletAddress, limit);
+      
+      logger.info(`Live wallet transactions fetched for user ${userId}`, {
+        userId,
+        walletAddress,
+        provider: liveTransactions.provider,
+        limit
+      });
+      
+      res.json({
+        success: true,
+        data: liveTransactions.data,
+        meta: {
+          provider: liveTransactions.provider,
+          live: true,
+          address: walletAddress
+        },
+        message: 'Live wallet transactions retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async getProviderStatus(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+      
+      const providerStatus = await cryptoService.getProviderStatus();
+      
+      res.json({
+        success: true,
+        data: providerStatus,
+        message: 'Provider status retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);

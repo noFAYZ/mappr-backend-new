@@ -11,6 +11,7 @@ import {
   CryptoErrorCodes,
 } from '@/types/crypto';
 import { AssetType, TransactionType, TransactionStatus } from '@prisma/client';
+import ZapperService, { createZapperService } from '@/services/zapperService';
 
 // Enhanced job processing statistics
 interface JobStats {
@@ -39,6 +40,7 @@ export interface SyncWalletFullJobData extends SyncWalletJobData {
   syncTransactions?: boolean;
   syncNFTs?: boolean;
   syncDeFi?: boolean;
+  syncTypes?: string[]; // New array format for sync types
 }
 
 export interface SyncTransactionsJobData {
@@ -62,6 +64,7 @@ export interface CalculatePortfolioJobData {
 export class CryptoJobProcessor {
   private static instance: CryptoJobProcessor;
   private zerionService: ZerionService | null = null;
+  private zapperService: ZapperService | null = null; // Placeholder for Zapper service
   private assetCacheService: AssetCacheService;
   private stats: Map<string, JobStats> = new Map();
   private activeJobs: Map<string, JobContext> = new Map(); // Track full context
@@ -104,6 +107,27 @@ export class CryptoJobProcessor {
           apiKeyLength: zerionApiKey?.length,
         });
         // Don't throw error - service can work with limited functionality
+      }
+    }
+
+    const zapperApiKey = process.env['ZAPPER_API_KEY'];
+    if (!zapperApiKey) {
+      logger.warn(
+        'ZAPPER_API_KEY environment variable not set. Zapper integration will be disabled.'
+      );
+    } else {
+      try {
+        this.zapperService = createZapperService({
+          apiKey: zapperApiKey,
+          rateLimit: {
+            requestsPerSecond: 10,
+            maxConcurrent: 5,
+          },
+        });
+        logger.info('Zapper service initialized successfully');
+      } catch (error) {
+        logger.error('Failed to initialize Zapper service:', error);
+        logger.warn('Service will continue without Zapper integration');
       }
     }
 
@@ -338,7 +362,24 @@ export class CryptoJobProcessor {
       syncTransactions = true,
       syncNFTs = true,
       syncDeFi = true,
+      syncTypes,
     } = job.data;
+
+    // Handle syncTypes array format
+    const shouldSyncAssets = syncTypes ? syncTypes.includes('assets') : syncAssets;
+    const shouldSyncTransactions = syncTypes ? syncTypes.includes('transactions') : syncTransactions;
+    const shouldSyncNFTs = syncTypes ? syncTypes.includes('nfts') : syncNFTs;
+    const shouldSyncDeFi = syncTypes ? syncTypes.includes('defi') : syncDeFi;
+
+    // Debug logging for sync types
+    console.log(`🔧 Sync configuration:`, {
+      syncTypes,
+      shouldSyncAssets,
+      shouldSyncTransactions,
+      shouldSyncNFTs,
+      shouldSyncDeFi,
+      hasZapperService: !!this.zapperService,
+    });
 
     // Initialize API tracking
     const apiTracker = {
@@ -427,7 +468,7 @@ export class CryptoJobProcessor {
       await this.processPortfolioData(wallet.id, portfolio);
       results.syncedData.push('portfolio');
 
-      if (syncAssets) {
+      if (shouldSyncAssets) {
         const positions = await trackApiCall('getWalletPositions', () =>
           this.zerionService!.getWalletPositions(wallet.address)
         );
@@ -437,7 +478,7 @@ export class CryptoJobProcessor {
         await job.updateProgress(25);
       }
 
-      if (syncTransactions) {
+      if (shouldSyncTransactions) {
         // Get the last transaction timestamp from database for incremental sync
         const lastTransaction = await prisma.cryptoTransaction.findFirst({
           where: { walletId: wallet.id },
@@ -483,13 +524,36 @@ export class CryptoJobProcessor {
         await job.updateProgress(50);
       }
 
-      if (syncNFTs) {
-        // NFT sync would go here - depends on Zerion SDK NFT methods
-        results.syncedData.push('nfts');
+      if (shouldSyncNFTs && this.zapperService) {
+        try {
+          // Track portfolio API call
+          const nfts = await trackApiCall('getWalletNFTs', () =>
+            this.zapperService!.getWalletNFTs([wallet.address])
+          );
+          
+          const nftCount = nfts?.portfolioV2?.nftBalances?.totalTokensOwned || 0;
+          console.log(`🖼️ Processing ${nftCount} NFTs`);
+          
+          // Process NFTs according to crypto_nfts schema
+          await this.processZapperNFTs(wallet.id, nfts);
+          
+          results.syncedData.push('nfts');
+          results.nftsSyncType = 'zapper';
+          results.nftsFetched = nftCount;
+        } catch (error) {
+          logger.warn('NFT sync failed, continuing', {
+            walletId: wallet.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         await job.updateProgress(75);
+      } else if (shouldSyncNFTs && !this.zapperService) {
+        console.log(`⚠️ NFT sync requested but Zapper service not available`);
+      } else if (!shouldSyncNFTs) {
+        console.log(`ℹ️ NFT sync skipped (not requested in syncTypes)`);
       }
 
-      if (syncDeFi) {
+      if (shouldSyncDeFi) {
         // DeFi position sync would go here
         results.syncedData.push('defi');
         await job.updateProgress(90);
@@ -882,7 +946,7 @@ export class CryptoJobProcessor {
     }
 
     // Handle ZerionPositionsResponse structure
-    const positions = positionsData.data || positionsData;
+    const positions = (positionsData.data || positionsData)?.filter((pos: any) => pos?.attributes?.price > 0);
 
     if (!Array.isArray(positions)) {
       logger.warn('Invalid positions data structure - expected array', {
@@ -921,8 +985,10 @@ export class CryptoJobProcessor {
       priceUsd?: number;
     }> = [];
 
+    console.log(`🔍 Parsing ${positions.length} positions for assets`);
     for (const position of positions) {
       try {
+       
         if (position.type !== 'positions') {
           skippedCount++;
           continue;
@@ -964,6 +1030,9 @@ export class CryptoJobProcessor {
           balance: quantity?.float || this.parseFloat(quantity?.numeric, 0),
           balanceFormatted: quantity?.numeric || '0',
           balanceUsd: attributes.value || 0,
+          dayChange: attributes?.changes?.absolute_1d || 0,
+          dayChangePct: attributes?.changes?.percent_1d || 0,
+
         };
 
         const additionalMetadata = {
@@ -1424,6 +1493,162 @@ export class CryptoJobProcessor {
     // Implementation would go here based on actual P&L data structure
   }
 
+private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
+    if (!nfts?.portfolioV2?.nftBalances?.byToken?.edges) {
+      logger.warn('No NFT data to process', { walletId });
+      return;
+    }
+
+    const edges = nfts.portfolioV2.nftBalances.byToken.edges;
+    let processedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+
+    logger.info('Starting NFT processing', {
+      walletId: walletId.substring(0, 8) + '...',
+      totalNFTs: edges.length,
+    });
+
+    for (const edge of edges) {
+      try {
+        const token = edge?.node?.token;
+        const collection = token?.collection;
+        
+        if (!token || !collection) {
+          skippedCount++;
+          continue;
+        }
+
+        // Skip spam NFTs
+        const spamScore = collection.spamScore || 0;
+        if (spamScore == 100) {
+          skippedCount++;
+          continue;
+        }
+
+        // Map network name to blockchain network enum
+        const networkName = String(collection.networkV2?.name || 'ethereum').toUpperCase();
+        const network = this.mapNetworkNameToBlockchain(networkName);
+
+        // Determine NFT standard based on network
+        const standard = this.determineNFTStandard(network);
+
+        // Extract NFT type from Zapper data
+        const nftType = token.type || collection.type || 'GENERAL';
+        const category = this.mapZapperNFTTypeToCategory(nftType);
+
+        // Extract image URL from mediasV3
+        const imageUrl = token.mediasV3?.images?.edges?.[0]?.node?.medium ||
+                        token.mediasV3?.images?.edges?.[0]?.node?.large ||
+                        null;
+
+        // Extract animation URL if available
+        const animationUrl = token.mediasV3?.videos?.edges?.[0]?.node?.medium ||
+                           token.mediasV3?.videos?.edges?.[0]?.node?.large ||
+                           null;
+
+        // Extract attributes
+        const attributes = token.attributes ? JSON.parse(JSON.stringify(token.attributes)) : null;
+
+        // Extract pricing information
+        const estimatedValue = parseFloat(token.estimatedValue?.valueUsd || '0');
+        const floorPrice = parseFloat(collection.floorPrice || '0');
+        const lastSalePrice = parseFloat(token.lastSale?.price || '0');
+
+        const nftData = {
+          walletId,
+          contractAddress: collection.address,
+          tokenId: token.tokenId,
+          standard,
+          network,
+          name: token.name || 'Unnamed NFT',
+          description: token.description || null,
+          imageUrl,
+          animationUrl,
+          externalUrl: token.externalUrl || null,
+          attributes: {
+            zapperType: nftType,
+            category: category,
+            originalAttributes: attributes,
+          },
+          collectionName: collection.name || collection.displayName,
+          collectionSymbol: collection.symbol || null,
+          collectionSlug: collection.slug || null,
+          ownerAddress: edge.node.owner || walletId, // Use actual owner address if available
+          quantity: BigInt(edge.node.balance || 1),
+          transferredAt: token.transferredAt ? new Date(token.transferredAt) : null,
+          lastSalePrice: lastSalePrice > 0 ? lastSalePrice : null,
+          lastSalePriceUsd: lastSalePrice > 0 ? lastSalePrice : null,
+          floorPrice: floorPrice > 0 ? floorPrice : null,
+          floorPriceUsd: floorPrice > 0 ? floorPrice : null,
+          estimatedValue: estimatedValue > 0 ? estimatedValue : null,
+          isSpam: spamScore >= 90, // Mark as spam if score is 50 or higher
+          isNsfw: token.isNsfw || false,
+          rarity: token.rarity?.rank ? `Rank ${token.rarity.rank}` : null,
+          rarityRank: token.rarity?.rank || null,
+        };
+
+        // Upsert NFT record
+        await prisma.cryptoNFT.upsert({
+          where: {
+            walletId_contractAddress_tokenId_network: {
+              walletId,
+              contractAddress: collection.address,
+              tokenId: token.tokenId,
+              network,
+            },
+          },
+          create: {
+            ...nftData,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          update: {
+            ...nftData,
+            updatedAt: new Date(),
+          },
+        });
+
+        processedCount++;
+
+        logger.debug('Processed NFT', {
+          walletId: walletId.substring(0, 8) + '...',
+          tokenId: token.tokenId,
+          collectionName: collection.name,
+          estimatedValue,
+          isSpam: nftData.isSpam,
+        });
+
+      } catch (error) {
+        errorCount++;
+        logger.warn('Error processing NFT', {
+          walletId: walletId.substring(0, 8) + '...',
+          error: error instanceof Error ? error.message : String(error),
+          tokenId: edge?.node?.token?.tokenId,
+          collectionName: edge?.node?.token?.collection?.name,
+        });
+      }
+    }
+
+    // Update wallet NFT count
+    await prisma.cryptoWallet.update({
+      where: { id: walletId },
+      data: {
+        nftCount: processedCount,
+        updatedAt: new Date(),
+      },
+    });
+
+    logger.info('NFT processing completed', {
+      walletId: walletId.substring(0, 8) + '...',
+      total: edges.length,
+      processedCount,
+      skippedCount,
+      errorCount,
+      successRate: edges.length > 0 ? ((processedCount / edges.length) * 100).toFixed(1) : '0',
+    });
+  }
+
   // ===============================
   // UTILITY METHODS
   // ===============================
@@ -1611,6 +1836,7 @@ export class CryptoJobProcessor {
   ): Promise<void> {
     try {
       const prismaClient = tx || prisma;
+
 
       logger.debug('Upserting position', {
         walletId: walletId.substring(0, 8) + '...',
@@ -2033,6 +2259,68 @@ export class CryptoJobProcessor {
     };
 
     return chainIdMap[chainId.toLowerCase()] || 'ETHEREUM';
+  }
+
+  private mapNetworkNameToBlockchain(networkName: string): any {
+    const networkMap: Record<string, string> = {
+      ETHEREUM: 'ETHEREUM',
+      POLYGON: 'POLYGON',
+      'BINANCE SMART CHAIN': 'BSC',
+      BSC: 'BSC',
+      ARBITRUM: 'ARBITRUM',
+      'ARBITRUM ONE': 'ARBITRUM',
+      OPTIMISM: 'OPTIMISM',
+      AVALANCHE: 'AVALANCHE',
+      BASE: 'BASE',
+      SOLANA: 'SOLANA',
+      BITCOIN: 'BITCOIN',
+      FANTOM: 'FANTOM',
+      CRONOS: 'CRONOS',
+      GNOSIS: 'GNOSIS',
+      AURORA: 'AURORA',
+      CELO: 'CELO',
+      MOONBEAM: 'MOONBEAM',
+      KAVA: 'KAVA',
+    };
+
+    return networkMap[networkName] || 'ETHEREUM';
+  }
+
+  private determineNFTStandard(network: any): any {
+    // Determine NFT standard based on network and contract analysis
+    switch (network) {
+      case 'SOLANA':
+        return 'SOLANA_NFT';
+      case 'BITCOIN':
+        return 'BTC_ORDINALS';
+      default:
+        // For EVM chains, default to ERC721
+        // In a real implementation, you would analyze the contract to determine if it's ERC721 or ERC1155
+        return 'ERC721';
+    }
+  }
+
+  private mapZapperNFTTypeToCategory(zapperType: string): string {
+    const typeMap: Record<string, string> = {
+      GENERAL: 'General',
+      BRIDGED: 'Bridge',
+      BADGE: 'Badge',
+      POAP: 'POAP',
+      TICKET: 'Ticket',
+      ACCOUNT_BOUND: 'Soulbound',
+      WRITING: 'Writing',
+      GAMING: 'Gaming',
+      ART_BLOCKS: 'Art',
+      BRAIN_DROPS: 'Art',
+      LENS_PROFILE: 'Social',
+      LENS_FOLLOW: 'Social',
+      LENS_COLLECT: 'Social',
+      ZORA_ERC721: 'Art',
+      ZORA_ERC1155: 'Art',
+      BLUEPRINT: 'Blueprint',
+    };
+
+    return typeMap[zapperType.toUpperCase()] || 'General';
   }
 
   private determineAssetType(fungible: any): AssetType {

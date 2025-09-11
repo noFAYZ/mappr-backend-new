@@ -19,36 +19,64 @@ const swaggerDefinition = {
   tags: [
     {
       name: 'Authentication',
-      description: 'User authentication and authorization endpoints'
+      description: 'User authentication and authorization endpoints',
     },
     {
       name: 'Users',
-      description: 'User profile and account management'
+      description: 'User profile and account management',
     },
     {
       name: 'Account Groups',
-      description: 'Organization and categorization of financial accounts and crypto wallets'
+      description: 'Organization and categorization of financial accounts and crypto wallets',
     },
     {
       name: 'Financial Accounts',
-      description: 'Traditional bank accounts and financial institutions'
+      description: 'Traditional bank accounts and financial institutions',
     },
     {
-      name: 'Crypto Wallets',
-      description: 'Cryptocurrency wallets and blockchain assets'
+      name: 'Crypto - Wallets',
+      description: 'Cryptocurrency wallet management and portfolio tracking',
+    },
+    {
+      name: 'Crypto - Transactions',
+      description: 'Blockchain transaction history and analysis',
+    },
+    {
+      name: 'Crypto - NFTs',
+      description: 'Non-fungible token collection and metadata',
+    },
+    {
+      name: 'Crypto - DeFi',
+      description: 'Decentralized Finance positions and protocols',
+    },
+    {
+      name: 'Crypto - Portfolio',
+      description: 'Aggregated portfolio analytics and performance',
+    },
+    {
+      name: 'Crypto - Analytics',
+      description: 'Advanced portfolio analytics and insights',
+    },
+    {
+      name: 'Crypto - Sync',
+      description: 'Wallet synchronization and data refresh',
+    },
+    {
+      name: 'Crypto - Export',
+      description: 'Portfolio data export and reporting',
     },
     {
       name: 'Subscriptions',
-      description: 'Plan management and billing'
+      description: 'Plan management and billing',
     },
     {
       name: 'Payments',
-      description: 'Payment processing and history'
+      description: 'Payment processing and history',
     },
     {
       name: 'Usage',
-      description: 'Usage tracking and limits'
-    }
+      description: 'Usage tracking and limits',
+    },
   ],
   servers: [
     {
@@ -1154,14 +1182,22 @@ const swaggerDefinition = {
           },
           type: {
             type: 'string',
-            enum: ['CHECKING', 'SAVINGS', 'CREDIT_CARD', 'INVESTMENT', 'LOAN', 'MORTGAGE', 'CRYPTO'],
+            enum: [
+              'CHECKING',
+              'SAVINGS',
+              'CREDIT_CARD',
+              'INVESTMENT',
+              'LOAN',
+              'MORTGAGE',
+              'CRYPTO',
+            ],
             description: 'Account type',
             example: 'CHECKING',
           },
           balance: {
             type: 'number',
             description: 'Account balance',
-            example: 1250.50,
+            example: 1250.5,
           },
           currency: {
             type: 'string',
@@ -1243,6 +1279,236 @@ const swaggerDefinition = {
           },
         },
         required: ['id', 'name', 'address', 'network', 'type', 'totalBalanceUsd', 'isActive'],
+      },
+      // Flexible Crypto Request Schemas
+      GetWalletDetailsFlexibleRequest: {
+        type: 'object',
+        properties: {
+          walletId: {
+            type: 'string',
+            description: 'Wallet ID (CUID)',
+            example: 'clm123wallet456def',
+          },
+          address: {
+            type: 'string',
+            description: 'Wallet address (0x... or base58)',
+            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
+          },
+          timeRange: {
+            type: 'string',
+            enum: ['24h', '7d', '30d', '90d', '1y', 'all'],
+            description: 'Time range for portfolio data',
+            example: '7d',
+          },
+        },
+        additionalProperties: false,
+        oneOf: [
+          { required: ['walletId'] },
+          { required: ['address'] }
+        ],
+      },
+      GetWalletTransactionsFlexibleRequest: {
+        type: 'object',
+        properties: {
+          walletId: {
+            type: 'string',
+            description: 'Wallet ID (CUID)',
+            example: 'clm123wallet456def',
+          },
+          address: {
+            type: 'string',
+            description: 'Wallet address (0x... or base58)',
+            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
+          },
+          page: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Page number for pagination',
+            example: 1,
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
+            description: 'Number of transactions per page',
+            example: 20,
+          },
+        },
+        additionalProperties: false,
+        oneOf: [
+          { required: ['walletId'] },
+          { required: ['address'] }
+        ],
+      },
+      GetWalletNFTsFlexibleRequest: {
+        type: 'object',
+        properties: {
+          walletId: {
+            type: 'string',
+            description: 'Wallet ID (CUID)',
+            example: 'clm123wallet456def',
+          },
+          address: {
+            type: 'string',
+            description: 'Wallet address (0x... or base58)',
+            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
+          },
+          page: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Page number for pagination',
+            example: 1,
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
+            description: 'Number of NFTs per page',
+            example: 20,
+          },
+        },
+        additionalProperties: false,
+        oneOf: [
+          { required: ['walletId'] },
+          { required: ['address'] }
+        ],
+      },
+      GetWalletDeFiFlexibleRequest: {
+        type: 'object',
+        properties: {
+          walletId: {
+            type: 'string',
+            description: 'Wallet ID (CUID)',
+            example: 'clm123wallet456def',
+          },
+          address: {
+            type: 'string',
+            description: 'Wallet address (0x... or base58)',
+            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
+          },
+          page: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Page number for pagination',
+            example: 1,
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
+            description: 'Number of DeFi positions per page',
+            example: 20,
+          },
+        },
+        additionalProperties: false,
+        oneOf: [
+          { required: ['walletId'] },
+          { required: ['address'] }
+        ],
+      },
+      // Portfolio and Transaction Response Schemas
+      PortfolioSummary: {
+        type: 'object',
+        properties: {
+          totalValue: {
+            type: 'number',
+            description: 'Total portfolio value in USD',
+            example: 15000.50,
+          },
+          totalAssets: {
+            type: 'integer',
+            description: 'Total number of assets',
+            example: 25,
+          },
+          dailyChange: {
+            type: 'object',
+            properties: {
+              value: { type: 'number', example: 150.25 },
+              percentage: { type: 'number', example: 1.05 },
+            },
+          },
+          assets: {
+            type: 'array',
+            description: 'Individual assets in portfolio',
+            items: {
+              type: 'object',
+              properties: {
+                symbol: { type: 'string', example: 'ETH' },
+                name: { type: 'string', example: 'Ethereum' },
+                balance: { type: 'string', example: '2.5' },
+                value: { type: 'number', example: 4500.75 },
+                price: { type: 'number', example: 1800.30 },
+              },
+            },
+          },
+        },
+        required: ['totalValue', 'totalAssets', 'assets'],
+      },
+      PaginatedTransactions: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          data: {
+            type: 'object',
+            properties: {
+              transactions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', example: 'tx123' },
+                    hash: { type: 'string', example: '0x123abc...' },
+                    type: { type: 'string', enum: ['SEND', 'RECEIVE', 'SWAP', 'STAKE', 'UNSTAKE'] },
+                    amount: { type: 'string', example: '1.5' },
+                    symbol: { type: 'string', example: 'ETH' },
+                    timestamp: { type: 'string', format: 'date-time' },
+                  },
+                },
+              },
+              pagination: {
+                type: 'object',
+                properties: {
+                  currentPage: { type: 'integer', example: 1 },
+                  totalPages: { type: 'integer', example: 5 },
+                  totalItems: { type: 'integer', example: 100 },
+                },
+              },
+            },
+          },
+        },
+      },
+      PaginatedNFTs: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          data: {
+            type: 'object',
+            properties: {
+              nfts: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', example: 'nft123' },
+                    contractAddress: { type: 'string', example: '0x123...' },
+                    tokenId: { type: 'string', example: '1234' },
+                    name: { type: 'string', example: 'Cool NFT #1234' },
+                    image: { type: 'string', example: 'https://...' },
+                    value: { type: 'number', example: 0.5 },
+                  },
+                },
+              },
+              pagination: {
+                type: 'object',
+                properties: {
+                  currentPage: { type: 'integer', example: 1 },
+                  totalPages: { type: 'integer', example: 3 },
+                  totalItems: { type: 'integer', example: 50 },
+                },
+              },
+            },
+          },
+        },
       },
     },
     responses: {

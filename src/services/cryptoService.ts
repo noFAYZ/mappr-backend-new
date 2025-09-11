@@ -27,7 +27,13 @@ export class CryptoService {
   private zerionService: ZerionService | null = null;
   private zapperService: ZapperService | null = null;
   private redis: Redis | null = null;
+  private primaryProvider: 'zapper' | 'zerion' = 'zapper';
+  private fallbackProvider: 'zapper' | 'zerion' = 'zerion';
+
   constructor() {
+    // Set provider preferences from environment
+    this.primaryProvider = (process.env['CRYPTO_PRIMARY_PROVIDER'] as 'zapper' | 'zerion') || 'zapper';
+    this.fallbackProvider = (process.env['CRYPTO_FALLBACK_PROVIDER'] as 'zapper' | 'zerion') || 'zerion';
     // Initialize Zerion SDK
     const zerionApiKey = process.env['ZERION_API_KEY'];
     if (!zerionApiKey) {
@@ -245,6 +251,188 @@ export class CryptoService {
       logger.error('Error fetching user wallets:', error);
       throw new AppError('Failed to fetch crypto wallets', 500);
     }
+  }
+
+  async resolveWallet(userId: string, walletId?: string, address?: string) {
+    try {
+      let wallet;
+
+      if (walletId) {
+        // Find by wallet ID
+        wallet = await prisma.cryptoWallet.findFirst({
+          where: { id: walletId, userId },
+        });
+      } else if (address) {
+        // Find by address
+        wallet = await prisma.cryptoWallet.findFirst({
+          where: {
+            address: address.toLowerCase(),
+            userId,
+          },
+        });
+      } else {
+        throw new AppError('Either walletId or address must be provided', 400);
+      }
+
+      if (!wallet) {
+        throw new CryptoServiceError('Wallet not found', CryptoErrorCodes.WALLET_NOT_FOUND, 404);
+      }
+
+      return wallet;
+    } catch (error) {
+      if (error instanceof AppError || error instanceof CryptoServiceError) {
+        throw error;
+      }
+      logger.error('Error resolving wallet:', error);
+      throw new AppError('Failed to resolve wallet', 500);
+    }
+  }
+
+  // ===============================
+  // UNIFIED PROVIDER METHODS
+  // ===============================
+
+  private async getWalletDataFromProvider(
+    address: string, 
+    provider: 'zapper' | 'zerion'
+  ): Promise<any> {
+    try {
+      if (provider === 'zapper' && this.zapperService) {
+        // Use individual Zapper methods for better performance
+        const [assets, nfts, transactions] = await Promise.all([
+          this.zapperService.getWalletAssets([address]),
+          this.zapperService.getWalletNFTs([address]),
+          this.zapperService.getWalletTransactions([address], 20)
+        ]);
+        
+        return {
+          provider: 'zapper',
+          data: { assets, nfts, transactions }
+        };
+      } else if (provider === 'zerion' && this.zerionService) {
+        const portfolioData = await this.zerionService.getWalletPortfolio(address);
+        return {
+          provider: 'zerion', 
+          data: portfolioData
+        };
+      } else {
+        throw new Error(`Provider ${provider} not available`);
+      }
+    } catch (error) {
+      logger.warn(`Failed to get wallet data from ${provider}:`, error);
+      throw error;
+    }
+  }
+
+  async getUnifiedWalletPortfolio(address: string): Promise<any> {
+    try {
+      // Try primary provider first
+      try {
+        const result = await this.getWalletDataFromProvider(address, this.primaryProvider);
+        logger.info(`Successfully fetched wallet portfolio from primary provider (${this.primaryProvider})`);
+        return result;
+      } catch (primaryError) {
+        logger.warn(`Primary provider (${this.primaryProvider}) failed, trying fallback:`, primaryError);
+        
+        // Try fallback provider
+        if (this.fallbackProvider !== this.primaryProvider) {
+          const result = await this.getWalletDataFromProvider(address, this.fallbackProvider);
+          logger.info(`Successfully fetched wallet portfolio from fallback provider (${this.fallbackProvider})`);
+          return result;
+        } else {
+          throw primaryError;
+        }
+      }
+    } catch (error) {
+      logger.error(`Both providers failed to fetch wallet portfolio for ${address}:`, error);
+      throw new CryptoServiceError(
+        'Unable to fetch wallet data from any provider',
+        CryptoErrorCodes.EXTERNAL_API_ERROR,
+        503
+      );
+    }
+  }
+
+  async getUnifiedWalletTransactions(address: string, limit = 20): Promise<any> {
+    try {
+      // Try primary provider first
+      try {
+        let result;
+        if (this.primaryProvider === 'zapper' && this.zapperService) {
+          const data = await this.zapperService.getWalletTransactions([address], limit);
+          result = { provider: 'zapper', data };
+        } else if (this.primaryProvider === 'zerion' && this.zerionService) {
+          const data = await this.zerionService.getWalletTransactions(address);
+          result = { provider: 'zerion', data };
+        } else {
+          throw new Error(`Primary provider ${this.primaryProvider} not available`);
+        }
+        
+        logger.info(`Successfully fetched wallet transactions from primary provider (${this.primaryProvider})`);
+        return result;
+      } catch (primaryError) {
+        logger.warn(`Primary provider (${this.primaryProvider}) failed for transactions, trying fallback:`, primaryError);
+        
+        // Try fallback provider
+        if (this.fallbackProvider !== this.primaryProvider) {
+          let result;
+          if (this.fallbackProvider === 'zapper' && this.zapperService) {
+            const data = await this.zapperService.getWalletTransactions([address], limit);
+            result = { provider: 'zapper', data };
+          } else if (this.fallbackProvider === 'zerion' && this.zerionService) {
+            const data = await this.zerionService.getWalletTransactions(address);
+            result = { provider: 'zerion', data };
+          } else {
+            throw new Error(`Fallback provider ${this.fallbackProvider} not available`);
+          }
+          
+          logger.info(`Successfully fetched wallet transactions from fallback provider (${this.fallbackProvider})`);
+          return result;
+        } else {
+          throw primaryError;
+        }
+      }
+    } catch (error) {
+      logger.error(`Both providers failed to fetch wallet transactions for ${address}:`, error);
+      throw new CryptoServiceError(
+        'Unable to fetch wallet transactions from any provider',
+        CryptoErrorCodes.EXTERNAL_API_ERROR,
+        503
+      );
+    }
+  }
+
+  async getProviderStatus(): Promise<{
+    primary: { provider: string; available: boolean; healthy: boolean };
+    fallback: { provider: string; available: boolean; healthy: boolean };
+  }> {
+    const checkProvider = async (provider: 'zapper' | 'zerion') => {
+      let available = false;
+      let healthy = false;
+      
+      try {
+        if (provider === 'zapper' && this.zapperService) {
+          available = true;
+          const healthCheck = await this.zapperService.healthCheck();
+          healthy = healthCheck.healthy;
+        } else if (provider === 'zerion' && this.zerionService) {
+          available = true;
+          const healthCheck = await this.zerionService.healthCheck();
+          healthy = healthCheck.healthy;
+        }
+      } catch (error) {
+        logger.warn(`Health check failed for ${provider}:`, error);
+      }
+      
+      return { provider, available, healthy };
+    };
+
+    const [primary, fallback] = await Promise.all([
+      checkProvider(this.primaryProvider),
+      checkProvider(this.fallbackProvider)
+    ]);
+
+    return { primary, fallback };
   }
 
   // ===============================
@@ -812,8 +1000,11 @@ export class CryptoService {
 
       const pages = Math.ceil(total / pagination.limit);
 
+      // Transform BigInt fields to strings for JSON serialization
+      const serializedNfts = nfts.map(nft => this.serializeNFT(nft));
+
       return {
-        data: nfts,
+        data: serializedNfts,
         pagination: {
           page: pagination.page,
           limit: pagination.limit,
@@ -932,6 +1123,36 @@ export class CryptoService {
   }
 
   // ===============================
+  // UTILITY METHODS
+  // ===============================
+
+  private serializeNFT(nft: any) {
+    return this.serializeBigIntFields(nft);
+  }
+
+  private serializeBigIntFields(obj: any): any {
+    if (obj === null || obj === undefined) return obj;
+    
+    if (typeof obj === 'bigint') {
+      return obj.toString();
+    }
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.serializeBigIntFields(item));
+    }
+    
+    if (typeof obj === 'object') {
+      const serialized: any = {};
+      for (const [key, value] of Object.entries(obj)) {
+        serialized[key] = this.serializeBigIntFields(value);
+      }
+      return serialized;
+    }
+    
+    return obj;
+  }
+
+  // ===============================
   // ENHANCED SYNC METHODS
   // ===============================
 
@@ -943,6 +1164,7 @@ export class CryptoService {
       syncTransactions?: boolean;
       syncNFTs?: boolean;
       syncDeFi?: boolean;
+      syncTypes?: string[]; // Support array format
     } = {}
   ) {
     try {
@@ -985,6 +1207,7 @@ export class CryptoService {
         syncTransactions: options.syncTransactions ?? true,
         syncNFTs: options.syncNFTs ?? false,
         syncDeFi: options.syncDeFi ?? false,
+        syncTypes: options.syncTypes, // Pass syncTypes array
       };
 
       const job = await cryptoSyncQueue.add(JOB_TYPES.SYNC_WALLET_FULL, jobData, {
@@ -1178,32 +1401,32 @@ export class CryptoService {
         this.zapperService!.networkToChainId(network)
       );
 
-      // Fetch portfolio data from Zapper
-      const portfolioResponse = await this.zapperService.getWalletPortfolio(
-        [wallet.address],
-        chainIds
-      );
-console.log(portfolioResponse)
-      // Process Zapper data into our format
-      const zapperData = this.processZapperPortfolioData(
+      // Fetch data from individual Zapper methods in parallel
+      const [assetsResponse, nftsResponse, transactionsResponse] = await Promise.all([
+        // Always fetch assets
+        this.zapperService.getWalletAssets([wallet.address], chainIds),
+        
+        // Fetch NFTs if requested (default true)
+        options.includeNFTs !== false 
+          ? this.zapperService.getWalletNFTs([wallet.address], chainIds)
+          : Promise.resolve(null),
+        
+        // Fetch transactions if requested
+        options.includeTransactions 
+          ? this.zapperService.getWalletTransactions([wallet.address], options.maxTransactions || 20)
+          : Promise.resolve(null)
+      ]);
+      // Process Zapper data into our format using individual responses
+      const zapperData = this.processZapperIndividualData(
         wallet.address,
-        portfolioResponse,
+        {
+          assets: assetsResponse,
+          nfts: nftsResponse,
+          transactions: transactionsResponse
+        },
         options
       );
-
-      // Fetch transactions if requested
-      if (options.includeTransactions) {
-        try {
-          const transactionResponse = await this.zapperService.getWalletTransactions(
-            [wallet.address],
-            options.maxTransactions || 20
-          );
-          zapperData.recentTransactions = this.processZapperTransactions(transactionResponse);
-        } catch (error) {
-          logger.warn('Failed to fetch Zapper transactions:', error);
-          zapperData.recentTransactions = [];
-        }
-      }
+      
 
       // Cache for 5 minutes (if Redis available)
       if (this.redis) {
@@ -1284,32 +1507,6 @@ console.log(portfolioResponse)
       nftCount: parseInt(portfolio.nftBalances.totalTokensOwned || '0'),
     };
 
-    // Process tokens
-    const tokens =
-      options.includeTokens !== false
-        ? portfolio.tokenBalances.byToken.edges.map((edge: any) => ({
-            tokenAddress: edge.node.tokenAddress,
-            symbol: edge.node.symbol,
-            balance: edge.node.balance,
-            balanceUsd: edge.node.balanceUSD,
-            imageUrl: edge.node.imgUrlV2,
-            network: this.zapperService!.mapNetworkName(edge.node.network.name),
-          }))
-        : [];
-
-    // Process app positions (DeFi)
-    const appPositions =
-      options.includeAppPositions !== false
-        ? portfolio.appBalances.byApp.edges.map((edge: any) => ({
-            appName: edge.node.app.displayName,
-            appId: edge.node.appId,
-            type: 'balance', // Generic type for app balances
-            balanceUsd: edge.node.balanceUSD,
-            positionCount: edge.node.positionCount,
-            network: this.zapperService!.mapNetworkName(edge.node.network.name),
-            imageUrl: edge.node.app.imgUrl,
-          }))
-        : [];
 
     // Process NFTs
     const nfts =
@@ -1331,61 +1528,82 @@ console.log(portfolioResponse)
     return {
       address,
       portfolioSummary,
-      tokens,
-      appPositions,
       nfts,
-      recentTransactions: [], // Will be filled by separate call if requested
       lastUpdated: new Date(),
     };
   }
 
-  private processZapperTransactions(transactionResponse: any) {
-    return transactionResponse.transactionHistoryV2.edges.map((edge: any) => ({
-      hash: edge.node.transaction.hash,
-      timestamp: edge.node.transaction.timestamp,
-      network: edge.node.transaction.network,
-      description: edge.node.interpretation.processedDescription,
-    }));
+
+
+  private processZapperIndividualData(
+    address: string,
+    responses: {
+      assets: any;
+      nfts: any | null;
+      transactions: any | null;
+    },
+    options: ZapperSyncOptions
+  ): ZapperWalletData {
+    const { assets, nfts } = responses;
+
+    // Calculate portfolio summary from individual responses
+    const tokenValue = assets?.portfolioV2?.tokenBalances?.totalBalanceUSD || 0;
+    const nftValue = nfts?.portfolioV2?.nftBalances?.totalBalanceUSD || 0;
+    
+    const portfolioSummary = {
+      totalValueUsd: tokenValue + nftValue,
+      tokenValue: tokenValue,
+      appPositionValue: 0, // Not available in individual calls
+      nftValue: nftValue,
+      tokenCount: assets?.portfolioV2?.tokenBalances?.byToken?.edges?.length || 0,
+      appPositionCount: 0, // Not available in individual calls
+      nftCount: parseInt(nfts?.portfolioV2?.nftBalances?.totalTokensOwned || '0'),
+    };
+
+    // Process NFTs from NFTs response
+    const processedNfts =
+    options.includeNFTs !== false &&
+    nfts?.portfolioV2?.nftBalances?.byToken?.edges
+      ? nfts.portfolioV2.nftBalances.byToken.edges
+          .filter((edge: any) => (edge?.node?.token?.collection?.spamScore || 0) < 75)
+          .map((edge: any) => ({
+            tokenId: edge?.node?.token?.tokenId,
+            name: edge?.node?.token?.name || 'Unnamed NFT',
+            imageUrl:
+              edge.node.token.mediasV3?.images.edges[0]?.node?.medium ||
+              edge.node.token.mediasV3?.images.edges[0]?.node?.large ||
+              null,
+            estimatedValueUsd: edge.node.token.estimatedValue?.valueUsd || 0,
+            valueNative: edge.node.token.estimatedValue?.valueWithDenomination || 0,
+            valueNativeSymbol: edge.node.token.estimatedValue?.denomination?.symbol || null,
+            collectionName:
+              edge.node.token.collection?.name || edge.node.collection?.displayName,
+            collection_imageUrl:
+              edge?.node?.token?.collection?.medias?.medium ||
+              edge.node.collection?.medias?.large ||
+              null,
+            spamScore: edge?.node?.token?.collection?.spamScore || 0,
+            collectionAddress: edge?.node?.token?.collection?.address,
+          }))
+      : [];
+
+
+    // Process transactions if available
+
+    return {
+      address,
+      portfolioSummary,
+    
+    // Not available in individual asset/NFT calls
+      nfts: processedNfts,
+  
+      lastUpdated: new Date(),
+    };
   }
 
-  async syncWalletWithZapper(userId: string, walletId: string, options: ZapperSyncOptions = {}) {
-    try {
-      // Get fresh data from Zapper
-      const zapperData = await this.getZapperWalletData(userId, walletId, {
-        ...options,
-        includeTokens: true,
-        includeAppPositions: true,
-        includeNFTs: true,
-        includeTransactions: true,
-      });
 
-      // Update wallet with Zapper data
-      await prisma.cryptoWallet.update({
-        where: { id: walletId },
-        data: {
-          totalBalanceUsd: zapperData.portfolioSummary.totalValueUsd,
-          lastSyncAt: new Date(),
-        },
-      });
 
-      logger.info(`Wallet ${walletId} synced with Zapper successfully`, {
-        totalValue: zapperData.portfolioSummary.totalValueUsd,
-        tokenCount: zapperData.portfolioSummary.tokenCount,
-        appPositionCount: zapperData.portfolioSummary.appPositionCount,
-        nftCount: zapperData.portfolioSummary.nftCount,
-      });
 
-      return {
-        success: true,
-        data: zapperData,
-        message: 'Wallet synced with Zapper successfully',
-      };
-    } catch (error) {
-      if (error instanceof CryptoServiceError) throw error;
-      logger.error('Error syncing wallet with Zapper:', error);
-      throw new AppError('Failed to sync wallet with Zapper', 500);
-    }
-  }
 
   async getJobStatus(jobId: string) {
     try {

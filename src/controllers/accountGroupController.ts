@@ -9,15 +9,25 @@ const CreateAccountGroupSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be less than 100 characters'),
   description: z.string().max(500, 'Description must be less than 500 characters').optional(),
   icon: z.string().max(50, 'Icon must be less than 50 characters').optional(),
-  color: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Invalid color format').optional(),
+  color: z
+    .string()
+    .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Invalid color format')
+    .optional(),
   parentId: z.string().cuid().optional(),
 });
 
 const UpdateAccountGroupSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100, 'Name must be less than 100 characters').optional(),
+  name: z
+    .string()
+    .min(1, 'Name is required')
+    .max(100, 'Name must be less than 100 characters')
+    .optional(),
   description: z.string().max(500, 'Description must be less than 500 characters').optional(),
   icon: z.string().max(50, 'Icon must be less than 50 characters').optional(),
-  color: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Invalid color format').optional(),
+  color: z
+    .string()
+    .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Invalid color format')
+    .optional(),
   parentId: z.string().cuid().nullable().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
@@ -48,11 +58,12 @@ export class AccountGroupController {
 
       const validatedData = CreateAccountGroupSchema.parse(req.body);
       const requestData: any = { name: validatedData.name };
-      if (validatedData.description !== undefined) requestData.description = validatedData.description;
+      if (validatedData.description !== undefined)
+        requestData.description = validatedData.description;
       if (validatedData.icon !== undefined) requestData.icon = validatedData.icon;
       if (validatedData.color !== undefined) requestData.color = validatedData.color;
       if (validatedData.parentId !== undefined) requestData.parentId = validatedData.parentId;
-      
+
       const accountGroup = await this.accountGroupService.createAccountGroup(userId, requestData);
 
       logger.info(`Account group created by user ${userId}`, {
@@ -68,7 +79,10 @@ export class AccountGroupController {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        throw new AppError(`Validation error: ${error.errors.map(e => e.message).join(', ')}`, 400);
+        throw new AppError(
+          `Validation error: ${error.errors.map((e) => e.message).join(', ')}`,
+          400
+        );
       }
       throw error;
     }
@@ -151,13 +165,18 @@ export class AccountGroupController {
       const validatedData = UpdateAccountGroupSchema.parse(req.body);
       const requestData: any = {};
       if (validatedData.name !== undefined) requestData.name = validatedData.name;
-      if (validatedData.description !== undefined) requestData.description = validatedData.description;
+      if (validatedData.description !== undefined)
+        requestData.description = validatedData.description;
       if (validatedData.icon !== undefined) requestData.icon = validatedData.icon;
       if (validatedData.color !== undefined) requestData.color = validatedData.color;
       if (validatedData.parentId !== undefined) requestData.parentId = validatedData.parentId;
       if (validatedData.sortOrder !== undefined) requestData.sortOrder = validatedData.sortOrder;
 
-      const updatedGroup = await this.accountGroupService.updateAccountGroup(userId, groupId, requestData);
+      const updatedGroup = await this.accountGroupService.updateAccountGroup(
+        userId,
+        groupId,
+        requestData
+      );
 
       logger.info(`Account group updated by user ${userId}`, {
         userId,
@@ -172,7 +191,10 @@ export class AccountGroupController {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        throw new AppError(`Validation error: ${error.errors.map(e => e.message).join(', ')}`, 400);
+        throw new AppError(
+          `Validation error: ${error.errors.map((e) => e.message).join(', ')}`,
+          400
+        );
       }
       throw error;
     }
@@ -233,7 +255,10 @@ export class AccountGroupController {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        throw new AppError(`Validation error: ${error.errors.map(e => e.message).join(', ')}`, 400);
+        throw new AppError(
+          `Validation error: ${error.errors.map((e) => e.message).join(', ')}`,
+          400
+        );
       }
       throw error;
     }

@@ -503,12 +503,9 @@ export enum CacheKeys {
 // ===============================
 
 export interface ZapperPortfolioSummary {
-  totalValueUsd: number;
-  tokenValue: number;
-  appPositionValue: number;
+ 
   nftValue: number;
-  tokenCount: number;
-  appPositionCount: number;
+
   nftCount: number;
 }
 
@@ -551,10 +548,8 @@ export interface ZapperTransaction {
 export interface ZapperWalletData {
   address: string;
   portfolioSummary: ZapperPortfolioSummary;
-  tokens: ZapperTokenBalance[];
-  appPositions: ZapperAppPosition[];
   nfts: ZapperNFTItem[];
-  recentTransactions: ZapperTransaction[];
+  
   lastUpdated: Date;
 }
 
@@ -593,4 +588,5 @@ export enum CryptoErrorCodes {
   INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
   RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
   NETWORK_NOT_SUPPORTED = 'NETWORK_NOT_SUPPORTED',
+  EXTERNAL_API_ERROR = 'EXTERNAL_API_ERROR',
 }

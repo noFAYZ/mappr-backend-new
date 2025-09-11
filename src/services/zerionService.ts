@@ -321,7 +321,12 @@ export class ZerionService {
         'getWalletPositions',
         async () => {
           return (
-            (await (this.sdk as any).wallets.getPositions?.(address, options)) || { data: null }
+            (await (this.sdk as any).wallets.getPositions?.(address, {
+              filter: {
+                positions: 'only_simple' ,
+                trash:'only_non_trash',
+              }
+            })) || { data: null }
           );
         },
         address

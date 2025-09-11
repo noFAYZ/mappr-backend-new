@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { cryptoController } from '@/controllers/cryptoController';
 import { authenticate } from '@/middleware/auth';
@@ -10,12 +10,21 @@ import {
   GetWalletTransactionsRequestSchema,
   GetWalletNFTsRequestSchema,
   GetWalletDeFiRequestSchema,
+  GetWalletDetailsFlexibleRequestSchema,
+  GetWalletTransactionsFlexibleRequestSchema,
+  GetWalletNFTsFlexibleRequestSchema,
+  GetWalletDeFiFlexibleRequestSchema,
   SyncWalletRequestSchema,
   GetAnalyticsRequestSchema,
   ExportDataRequestSchema,
 } from '@/utils/cryptoValidation';
 
 const router = Router();
+
+// Async error handler wrapper
+const asyncHandler = (fn: Function) => (req: Request, res: Response, next: NextFunction) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
 
 // ===============================
 // RATE LIMITING
@@ -186,7 +195,7 @@ router.post(
 router.get(
   '/wallets/:walletId',
   validate(GetWalletDetailsRequestSchema),
-  cryptoController.getWalletDetails.bind(cryptoController)
+  asyncHandler(cryptoController.getWalletDetails.bind(cryptoController))
 );
 
 /**
@@ -245,7 +254,182 @@ router.put(
 router.delete(
   '/wallets/:walletId',
   writeOperationsRateLimit,
-  cryptoController.removeWallet.bind(cryptoController)
+  asyncHandler(cryptoController.removeWallet.bind(cryptoController))
+);
+
+// ===============================
+// FLEXIBLE WALLET ROUTES (Support both ID and Address)
+// ===============================
+
+/**
+ * @swagger
+ * /api/v1/crypto/wallet:
+ *   get:
+ *     summary: Get wallet details and portfolio (flexible - by ID or address)
+ *     tags: [Crypto - Wallets]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: walletId
+ *         schema:
+ *           type: string
+ *         description: Wallet ID (CUID)
+ *       - in: query
+ *         name: address
+ *         schema:
+ *           type: string
+ *         description: Wallet address (0x... or base58)
+ *       - in: query
+ *         name: timeRange
+ *         schema:
+ *           type: string
+ *           enum: [24h, 7d, 30d, 90d, 1y, all]
+ *         description: Time range for portfolio data
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved wallet portfolio
+ *       400:
+ *         description: Either walletId or address must be provided
+ *       404:
+ *         description: Wallet not found
+ */
+router.get(
+  '/wallet',
+  validate(GetWalletDetailsFlexibleRequestSchema),
+  asyncHandler(cryptoController.getWalletDetailsFlexible.bind(cryptoController))
+);
+
+/**
+ * @swagger
+ * /api/v1/crypto/wallet/transactions:
+ *   get:
+ *     summary: Get wallet transactions (flexible - by ID or address)
+ *     tags: [Crypto - Transactions]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: walletId
+ *         schema:
+ *           type: string
+ *         description: Wallet ID (CUID)
+ *       - in: query
+ *         name: address
+ *         schema:
+ *           type: string
+ *         description: Wallet address (0x... or base58)
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved wallet transactions
+ *       400:
+ *         description: Either walletId or address must be provided
+ *       404:
+ *         description: Wallet not found
+ */
+router.get(
+  '/wallet/transactions',
+  validate(GetWalletTransactionsFlexibleRequestSchema),
+  asyncHandler(cryptoController.getWalletTransactionsFlexible.bind(cryptoController))
+);
+
+/**
+ * @swagger
+ * /api/v1/crypto/wallet/nfts:
+ *   get:
+ *     summary: Get wallet NFTs (flexible - by ID or address)
+ *     tags: [Crypto - NFTs]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: walletId
+ *         schema:
+ *           type: string
+ *         description: Wallet ID (CUID)
+ *       - in: query
+ *         name: address
+ *         schema:
+ *           type: string
+ *         description: Wallet address (0x... or base58)
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved wallet NFTs
+ *       400:
+ *         description: Either walletId or address must be provided
+ *       404:
+ *         description: Wallet not found
+ */
+router.get(
+  '/wallet/nfts',
+  validate(GetWalletNFTsFlexibleRequestSchema),
+  asyncHandler(cryptoController.getWalletNFTsFlexible.bind(cryptoController))
+);
+
+/**
+ * @swagger
+ * /api/v1/crypto/wallet/defi:
+ *   get:
+ *     summary: Get wallet DeFi positions (flexible - by ID or address)
+ *     tags: [Crypto - DeFi]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: walletId
+ *         schema:
+ *           type: string
+ *         description: Wallet ID (CUID)
+ *       - in: query
+ *         name: address
+ *         schema:
+ *           type: string
+ *         description: Wallet address (0x... or base58)
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved wallet DeFi positions
+ *       400:
+ *         description: Either walletId or address must be provided
+ *       404:
+ *         description: Wallet not found
+ */
+router.get(
+  '/wallet/defi',
+  validate(GetWalletDeFiFlexibleRequestSchema),
+  asyncHandler(cryptoController.getWalletDeFiPositionsFlexible.bind(cryptoController))
 );
 
 // ===============================
@@ -710,57 +894,6 @@ router.get(
   cryptoController.getZapperWalletData.bind(cryptoController)
 );
 
-/**
- * @swagger
- * /api/crypto/wallets/{walletId}/zapper/sync:
- *   post:
- *     tags: [Zapper Integration]
- *     summary: Sync wallet with Zapper data
- *     description: Synchronize wallet data with fresh information from Zapper
- *     parameters:
- *       - in: path
- *         name: walletId
- *         required: true
- *         schema:
- *           type: string
- *         description: Wallet ID
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               includeTokens:
- *                 type: boolean
- *                 default: true
- *               includeAppPositions:
- *                 type: boolean
- *                 default: true
- *               includeNFTs:
- *                 type: boolean
- *                 default: true
- *               includeTransactions:
- *                 type: boolean
- *                 default: true
- *               networks:
- *                 type: array
- *                 items:
- *                   type: string
- *     responses:
- *       200:
- *         description: Wallet synced successfully
- *       404:
- *         description: Wallet not found
- *       503:
- *         description: Zapper service not available
- */
-router.post(
-  '/wallets/:walletId/zapper/sync',
-  authenticate,
-  cryptoRateLimit,
-  writeOperationsRateLimit,
-  cryptoController.syncWalletWithZapper.bind(cryptoController)
-);
 
 /**
  * @swagger
@@ -833,6 +966,141 @@ router.get(
   '/zapper/health',
   authenticate,
   cryptoController.getZapperServiceHealth.bind(cryptoController)
+);
+
+// ===============================
+// UNIFIED PROVIDER ROUTES
+// ===============================
+
+/**
+ * @swagger
+ * /api/v1/crypto/wallet/portfolio/live:
+ *   get:
+ *     summary: Get live wallet portfolio data from external providers
+ *     tags: [Crypto - Live Data]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: walletId
+ *         schema:
+ *           type: string
+ *         description: Wallet ID (alternative to address)
+ *       - in: query
+ *         name: address
+ *         schema:
+ *           type: string
+ *         description: Wallet address (alternative to walletId)
+ *     responses:
+ *       200:
+ *         description: Live wallet portfolio retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     provider:
+ *                       type: string
+ *                       enum: [zapper, zerion]
+ *                     live:
+ *                       type: boolean
+ *                     address:
+ *                       type: string
+ */
+router.get(
+  '/wallet/portfolio/live',
+  authenticate,
+  cryptoRateLimit,
+  asyncHandler(cryptoController.getWalletDetailsLive.bind(cryptoController))
+);
+
+/**
+ * @swagger
+ * /api/v1/crypto/wallet/transactions/live:
+ *   get:
+ *     summary: Get live wallet transactions from external providers
+ *     tags: [Crypto - Live Data]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: walletId
+ *         schema:
+ *           type: string
+ *         description: Wallet ID (alternative to address)
+ *       - in: query
+ *         name: address
+ *         schema:
+ *           type: string
+ *         description: Wallet address (alternative to walletId)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Maximum number of transactions to return
+ *     responses:
+ *       200:
+ *         description: Live wallet transactions retrieved successfully
+ */
+router.get(
+  '/wallet/transactions/live',
+  authenticate,
+  cryptoRateLimit,
+  asyncHandler(cryptoController.getWalletTransactionsLive.bind(cryptoController))
+);
+
+/**
+ * @swagger
+ * /api/v1/crypto/providers/status:
+ *   get:
+ *     summary: Get status of crypto data providers
+ *     tags: [Crypto - System]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Provider status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     primary:
+ *                       type: object
+ *                       properties:
+ *                         provider:
+ *                           type: string
+ *                         available:
+ *                           type: boolean
+ *                         healthy:
+ *                           type: boolean
+ *                     fallback:
+ *                       type: object
+ *                       properties:
+ *                         provider:
+ *                           type: string
+ *                         available:
+ *                           type: boolean
+ *                         healthy:
+ *                           type: boolean
+ */
+router.get(
+  '/providers/status',
+  authenticate,
+  asyncHandler(cryptoController.getProviderStatus.bind(cryptoController))
 );
 
 export { router as cryptoRoutes };

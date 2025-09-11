@@ -77,7 +77,10 @@ export class AccountGroupService {
     }
   }
 
-  async getAccountGroups(userId: string, includeDetails = false): Promise<AccountGroupWithDetails[]> {
+  async getAccountGroups(
+    userId: string,
+    includeDetails = false
+  ): Promise<AccountGroupWithDetails[]> {
     try {
       const groups = await prisma.accountGroup.findMany({
         where: { userId },
@@ -87,10 +90,7 @@ export class AccountGroupService {
           children: true,
           _count: true,
         },
-        orderBy: [
-          { sortOrder: 'asc' },
-          { createdAt: 'asc' },
-        ],
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       });
 
       return groups;
@@ -100,7 +100,10 @@ export class AccountGroupService {
     }
   }
 
-  async getAccountGroupById(userId: string, groupId: string): Promise<AccountGroupWithDetails | null> {
+  async getAccountGroupById(
+    userId: string,
+    groupId: string
+  ): Promise<AccountGroupWithDetails | null> {
     try {
       const group = await prisma.accountGroup.findFirst({
         where: {
@@ -233,11 +236,17 @@ export class AccountGroupService {
 
       // Check if group has accounts or children
       if (existingGroup.financialAccounts.length > 0 || existingGroup.cryptoWallets.length > 0) {
-        throw new AppError('Cannot delete group with accounts. Move accounts to another group first.', 400);
+        throw new AppError(
+          'Cannot delete group with accounts. Move accounts to another group first.',
+          400
+        );
       }
 
       if (existingGroup.children.length > 0) {
-        throw new AppError('Cannot delete group with child groups. Delete or move child groups first.', 400);
+        throw new AppError(
+          'Cannot delete group with child groups. Delete or move child groups first.',
+          400
+        );
       }
 
       await prisma.accountGroup.delete({
@@ -309,7 +318,9 @@ export class AccountGroupService {
         });
       }
 
-      logger.info(`Moved ${accountType} account ${accountId} to group ${groupId || 'null'} for user ${userId}`);
+      logger.info(
+        `Moved ${accountType} account ${accountId} to group ${groupId || 'null'} for user ${userId}`
+      );
     } catch (error) {
       if (error instanceof AppError) throw error;
       logger.error(`Error moving ${accountType} account to group:`, error);
@@ -343,10 +354,7 @@ export class AccountGroupService {
           },
           _count: true,
         },
-        orderBy: [
-          { sortOrder: 'asc' },
-          { createdAt: 'asc' },
-        ],
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       });
 
       return topLevelGroups;
@@ -356,14 +364,18 @@ export class AccountGroupService {
     }
   }
 
-  private async isDescendant(userId: string, ancestorId: string, potentialDescendantId: string): Promise<boolean> {
+  private async isDescendant(
+    userId: string,
+    ancestorId: string,
+    potentialDescendantId: string
+  ): Promise<boolean> {
     const descendants = await this.getAllDescendants(userId, ancestorId);
-    return descendants.some(group => group.id === potentialDescendantId);
+    return descendants.some((group) => group.id === potentialDescendantId);
   }
 
   private async getAllDescendants(userId: string, groupId: string): Promise<AccountGroup[]> {
     const descendants: AccountGroup[] = [];
-    
+
     const children = await prisma.accountGroup.findMany({
       where: {
         userId,

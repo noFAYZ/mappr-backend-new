@@ -100,7 +100,6 @@ export interface ZapperPortfolioResponse {
   };
 }
 
-
 export interface ZapperTransactionNode {
   transaction: {
     hash: string;
@@ -122,6 +121,12 @@ export interface ZapperTransactionResponse {
       endCursor: string;
     };
   };
+}
+
+export interface ZapperCombinedPortfolioResponse {
+  assets: ZapperPortfolioResponse;
+  nfts: ZapperPortfolioResponse;
+  transactions: ZapperTransactionResponse;
 }
 
 export interface ZapperServiceConfig {
@@ -251,6 +256,36 @@ export class ZapperService {
   async getWalletPortfolio(
     addresses: string[],
     chainIds?: number[]
+  ): Promise<ZapperCombinedPortfolioResponse> {
+    try {
+      logger.info(`Fetching combined Zapper portfolio for ${addresses.length} addresses`, {
+        addresses: addresses.slice(0, 3), // Log first 3 for privacy
+        chainIds,
+      });
+
+      // Execute all three requests in parallel for efficiency
+      const [assets, nfts, transactions] = await Promise.all([
+        this.getWalletAssets(addresses, chainIds),
+        this.getWalletNFTs(addresses, chainIds),
+        this.getWalletTransactions(addresses, 20) // Default to 20 recent transactions
+      ]);
+
+      return {
+        assets,
+        nfts,
+        transactions
+      };
+    } catch (error) {
+      logger.error('Error fetching combined Zapper portfolio:', error);
+      throw new Error(
+        `Failed to fetch combined Zapper portfolio: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  async getWalletAssets(
+    addresses: string[],
+    chainIds?: number[]
   ): Promise<ZapperPortfolioResponse> {
     const query = `
      query PortfolioV2Query($addresses: [Address!]!) {
@@ -265,77 +300,15 @@ export class ZapperService {
                   balance
                   balanceUSD
                   imgUrlV2
-                  network {
-                    name
-                  }
                   price
                   name
-                }
-              }
-            }
-          }
-          appBalances {
-            totalBalanceUSD
-            byApp(first: 20) {
-              edges {
-                node {             
-                  appId
-                  balanceUSD
                   network {
                     name
                   }
-                  positionCount
-                  app {
-                    imgUrl
-                    displayName
-                  }
+                  
                 }
               }
             }
-          }
-          nftBalances {
-            totalBalanceUSD
-            byCollection(first: 10) {
-              edges {
-                node {
-                 
-                  collection {
-                    address
-                    displayName
-                    floorPrice {
-                      valueUsd
-                    }
-                    name
-                    spamScore
-                    symbol
-                    nfts {
-                      edges {
-                        node {
-                          id
-                          estimatedValue {
-                            valueUsd
-                          }
-                          name
-                          collection {
-                            name
-                          }
-                          mediasV3 {
-                            images {
-                              edges {
-                                node {
-                                  url
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            totalTokensOwned
           }
         }
       }
@@ -346,20 +319,102 @@ export class ZapperService {
     };
 
     try {
-      logger.info(`Fetching Zapper portfolio for ${addresses.length} addresses`, {
+      logger.info(`Fetching Zapper Assets for ${addresses.length} addresses`, {
         addresses: addresses.slice(0, 3), // Log first 3 for privacy
         chainIds,
       });
 
       return await this.makeGraphQLRequest<ZapperPortfolioResponse>(query, variables);
     } catch (error) {
-      logger.error('Error fetching Zapper portfolio:', error);
+      logger.error('Error fetching Zapper Assets:', error);
       throw new Error(
-        `Failed to fetch Zapper portfolio: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to fetch Zapper Assets: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
+  async getWalletNFTs(addresses: string[], chainIds?: number[]): Promise<ZapperPortfolioResponse> {
+    const query = `
+    query PortfolioV2Query($addresses: [Address!]!) {
+        portfolioV2(addresses: $addresses) {
+           nftBalances {
+            totalBalanceUSD
+            totalTokensOwned
+            byToken {
+              edges {
+                node {
+                  token {
+                    tokenId
+                    name
+                    description
+                    supply
+                    circulatingSupply
+                    estimatedValue {
+                      valueUsd
+                      valueWithDenomination
+                      denomination {
+                        address
+                        symbol
+                        network
+                      }
+                    }
+                    collection {
+                      address
+                      name
+                      type
+                      owner
+                      medias {
+                        logo {
+                          mimeType
+                          medium
+                        }
+                      }
+                        spamScore
+                      floorPrice {
+                        valueUsd
+                      }
+                      networkV2 {
+                        name
+                      }
+                    }
+                    mediasV3 {
+                      images {
+                        edges {
+                          node {
+                            mimeType
+                            thumbnail
+                            medium
+                            predominantColor
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
 
+    const variables = {
+      addresses,
+    };
+
+    try {
+      logger.info(`Fetching Zapper NFTs for ${addresses.length} addresses`, {
+        addresses: addresses.slice(0, 3), // Log first 3 for privacy
+        chainIds,
+      });
+
+      return await this.makeGraphQLRequest<ZapperPortfolioResponse>(query, variables);
+    } catch (error) {
+      logger.error('Error fetching Zapper NFTs:', error);
+      throw new Error(
+        `Failed to fetch Zapper NFTs: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
   async getWalletTransactions(
     addresses: string[],
     first = 20,
@@ -376,25 +431,122 @@ export class ZapperService {
             orderByDirection: DESC
           }
         ) {
-          edges {
-            node {
-              ... on TimelineEventV2 {
-                transaction {
-                  hash
-                  timestamp
-                  network
+    totalCount
+    pageInfo {
+      startCursor
+      endCursor
+      hasNextPage
+      hasPreviousPage
+    }
+    edges {
+      cursor
+      node {
+        ... on TimelineEventV2 {
+          methodSignature
+          methodSighash
+          transaction {
+            blockNumber
+            hash
+            network
+            timestamp
+            fromUser {
+              address
+              displayName { value source }
+              farcasterProfile { fid username }
+            }
+            toUser {
+              address
+              displayName { value source }
+            }
+          }
+          interpretation {
+            processedDescription
+            description
+            descriptionDisplayItems {
+              ... on TokenDisplayItem {
+                type
+                tokenAddress
+                amountRaw
+                network
+                tokenV2 {
+                  decimals
+                  symbol
+                  name
+                  imageUrlV2
+                  priceData {
+                    price
+                    priceChange24h
+                  }
                 }
-                interpretation {
-                  processedDescription
+              }
+              ... on ActorDisplayItem {
+                type
+                address
+                account {
+                  displayName { value source }
                 }
               }
             }
           }
-          pageInfo {
-            hasNextPage
-            endCursor
+          deltas {
+            totalCount
+            edges {
+              node {
+                account { address isContract }
+                tokenDeltasV2 {
+                  edges {
+                    node {
+                      amount
+                      amountRaw
+                      token {
+                        address
+                        credibility
+                        decimals
+                        symbol
+                        imageUrlV2
+                        priceData { price priceChange24h }
+                      }
+                    }
+                  }
+                }
+                nftDeltasV2 {
+                  edges {
+                    node {
+                      collectionAddress
+                      tokenId
+                      quantity
+                      tokenUri
+                    }
+                  }
+                }
+              }
+            }
           }
         }
+        ... on ActivityTimelineEventDelta {
+          transactionHash
+          transactionBlockTimestamp
+          network
+          subject
+          from { address isContract }
+          to { address isContract }
+          fungibleDeltas {
+            amount
+            amountRaw
+            token {
+              address
+              credibility
+              decimals
+              symbol
+              imageUrlV2
+              priceData { price priceChange24h }
+            }
+          }
+          # You can also request other side details (e.g. NFT deltas) if needed
+        }
+      }
+    }
+  }
       }
     `;
 
@@ -423,7 +575,7 @@ export class ZapperService {
   async getFarcasterPortfolio(
     fids?: number[],
     usernames?: string[]
-  ): Promise<{ addresses: string[]; portfolio?: ZapperPortfolioResponse }> {
+  ): Promise<{ addresses: string[]; portfolio?: ZapperCombinedPortfolioResponse }> {
     if (!fids && !usernames) {
       throw new Error('Must provide either FIDs or usernames');
     }
@@ -575,7 +727,7 @@ export class ZapperService {
   async getBatchPortfolios(
     addressGroups: string[][],
     chainIds?: number[]
-  ): Promise<ZapperPortfolioResponse[]> {
+  ): Promise<ZapperCombinedPortfolioResponse[]> {
     const promises = addressGroups.map((addresses) => this.getWalletPortfolio(addresses, chainIds));
 
     try {

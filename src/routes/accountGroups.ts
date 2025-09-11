@@ -2,8 +2,14 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { accountGroupController } from '@/controllers/accountGroupController';
 import { authenticate } from '@/middleware/auth';
+import { Request, Response, NextFunction } from 'express';
 
 const router = Router();
+
+// Async error handler wrapper
+const asyncHandler = (fn: Function) => (req: Request, res: Response, next: NextFunction) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
 
 // ===============================
 // RATE LIMITING
@@ -106,7 +112,7 @@ router.use(accountGroupRateLimit);
 router.post(
   '/',
   writeOperationsRateLimit,
-  accountGroupController.createAccountGroup.bind(accountGroupController)
+  asyncHandler(accountGroupController.createAccountGroup.bind(accountGroupController))
 );
 
 /**
@@ -148,10 +154,7 @@ router.post(
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get(
-  '/',
-  accountGroupController.getAccountGroups.bind(accountGroupController)
-);
+router.get('/', asyncHandler(accountGroupController.getAccountGroups.bind(accountGroupController)));
 
 /**
  * @swagger
@@ -187,7 +190,7 @@ router.get(
  */
 router.get(
   '/hierarchy',
-  accountGroupController.getAccountGroupHierarchy.bind(accountGroupController)
+  asyncHandler(accountGroupController.getAccountGroupHierarchy.bind(accountGroupController))
 );
 
 /**
@@ -225,7 +228,7 @@ router.get(
 router.post(
   '/defaults',
   writeOperationsRateLimit,
-  accountGroupController.createDefaultGroups.bind(accountGroupController)
+  asyncHandler(accountGroupController.createDefaultGroups.bind(accountGroupController))
 );
 
 /**
@@ -282,7 +285,7 @@ router.post(
 router.post(
   '/move-account',
   writeOperationsRateLimit,
-  accountGroupController.moveAccountToGroup.bind(accountGroupController)
+  asyncHandler(accountGroupController.moveAccountToGroup.bind(accountGroupController))
 );
 
 /**
@@ -327,7 +330,7 @@ router.post(
  */
 router.get(
   '/:groupId',
-  accountGroupController.getAccountGroupById.bind(accountGroupController)
+  asyncHandler(accountGroupController.getAccountGroupById.bind(accountGroupController))
 );
 
 /**
@@ -394,7 +397,7 @@ router.get(
 router.put(
   '/:groupId',
   writeOperationsRateLimit,
-  accountGroupController.updateAccountGroup.bind(accountGroupController)
+  asyncHandler(accountGroupController.updateAccountGroup.bind(accountGroupController))
 );
 
 /**
@@ -444,7 +447,7 @@ router.put(
 router.delete(
   '/:groupId',
   writeOperationsRateLimit,
-  accountGroupController.deleteAccountGroup.bind(accountGroupController)
+  asyncHandler(accountGroupController.deleteAccountGroup.bind(accountGroupController))
 );
 
 export default router;

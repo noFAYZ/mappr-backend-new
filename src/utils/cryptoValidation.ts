@@ -76,6 +76,44 @@ export const WalletParamsSchema = z.object({
   walletId: z.string().min(1, 'Wallet ID is required').cuid('Invalid wallet ID format'),
 });
 
+export const WalletIdentifierParamsSchema = z
+  .object({
+    walletId: z.string().min(1, 'Wallet identifier is required').optional(),
+    address: z
+      .string()
+      .min(1, 'Wallet address is required')
+      .max(100, 'Wallet address must be less than 100 characters')
+      .trim()
+      .refine((address) => {
+        // Basic address validation - more specific validation in service layer
+        return /^[a-zA-Z0-9]+$/.test(address) || /^0x[a-fA-F0-9]+$/.test(address);
+      }, 'Invalid wallet address format')
+      .optional(),
+  })
+  .refine((data) => data.walletId || data.address, {
+    message: 'Either walletId or address must be provided',
+    path: ['walletId'],
+  });
+
+export const WalletIdentifierQuerySchema = z
+  .object({
+    walletId: z.string().min(1, 'Wallet identifier is required').optional(),
+    address: z
+      .string()
+      .min(1, 'Wallet address is required')
+      .max(100, 'Wallet address must be less than 100 characters')
+      .trim()
+      .refine((address) => {
+        // Basic address validation - more specific validation in service layer
+        return /^[a-zA-Z0-9]+$/.test(address) || /^0x[a-fA-F0-9]+$/.test(address);
+      }, 'Invalid wallet address format')
+      .optional(),
+  })
+  .refine((data) => data.walletId || data.address, {
+    message: 'Either walletId or address must be provided',
+    path: ['walletId'],
+  });
+
 // ===============================
 // PAGINATION AND FILTERING SCHEMAS
 // ===============================
@@ -406,6 +444,91 @@ export const GetWalletNFTsRequestSchema = z.object({
 export const GetWalletDeFiRequestSchema = z.object({
   params: WalletParamsSchema,
   query: GetWalletDeFiQuerySchema,
+});
+
+// New flexible schemas that support both wallet ID and address
+export const GetWalletDetailsFlexibleRequestSchema = z.object({
+  query: z
+    .object({
+      walletId: z.string().min(1, 'Wallet identifier is required').optional(),
+      address: z
+        .string()
+        .min(1, 'Wallet address is required')
+        .max(100, 'Wallet address must be less than 100 characters')
+        .trim()
+        .refine((address) => {
+          return /^[a-zA-Z0-9]+$/.test(address) || /^0x[a-fA-F0-9]+$/.test(address);
+        }, 'Invalid wallet address format')
+        .optional(),
+    })
+    .merge(PortfolioQuerySchema.partial())
+    .refine((data) => data.walletId || data.address, {
+      message: 'Either walletId or address must be provided',
+      path: ['walletId'],
+    }),
+});
+
+export const GetWalletTransactionsFlexibleRequestSchema = z.object({
+  query: z
+    .object({
+      walletId: z.string().min(1, 'Wallet identifier is required').optional(),
+      address: z
+        .string()
+        .min(1, 'Wallet address is required')
+        .max(100, 'Wallet address must be less than 100 characters')
+        .trim()
+        .refine((address) => {
+          return /^[a-zA-Z0-9]+$/.test(address) || /^0x[a-fA-F0-9]+$/.test(address);
+        }, 'Invalid wallet address format')
+        .optional(),
+    })
+    .merge(GetWalletTransactionsQuerySchema)
+    .refine((data) => data.walletId || data.address, {
+      message: 'Either walletId or address must be provided',
+      path: ['walletId'],
+    }),
+});
+
+export const GetWalletNFTsFlexibleRequestSchema = z.object({
+  query: z
+    .object({
+      walletId: z.string().min(1, 'Wallet identifier is required').optional(),
+      address: z
+        .string()
+        .min(1, 'Wallet address is required')
+        .max(100, 'Wallet address must be less than 100 characters')
+        .trim()
+        .refine((address) => {
+          return /^[a-zA-Z0-9]+$/.test(address) || /^0x[a-fA-F0-9]+$/.test(address);
+        }, 'Invalid wallet address format')
+        .optional(),
+    })
+    .merge(GetWalletNFTsQuerySchema)
+    .refine((data) => data.walletId || data.address, {
+      message: 'Either walletId or address must be provided',
+      path: ['walletId'],
+    }),
+});
+
+export const GetWalletDeFiFlexibleRequestSchema = z.object({
+  query: z
+    .object({
+      walletId: z.string().min(1, 'Wallet identifier is required').optional(),
+      address: z
+        .string()
+        .min(1, 'Wallet address is required')
+        .max(100, 'Wallet address must be less than 100 characters')
+        .trim()
+        .refine((address) => {
+          return /^[a-zA-Z0-9]+$/.test(address) || /^0x[a-fA-F0-9]+$/.test(address);
+        }, 'Invalid wallet address format')
+        .optional(),
+    })
+    .merge(GetWalletDeFiQuerySchema)
+    .refine((data) => data.walletId || data.address, {
+      message: 'Either walletId or address must be provided',
+      path: ['walletId'],
+    }),
 });
 
 export const SyncWalletRequestSchema = z.object({

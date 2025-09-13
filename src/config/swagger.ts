@@ -19,7 +19,7 @@ const swaggerDefinition = {
   tags: [
     {
       name: 'Authentication',
-      description: 'User authentication and authorization endpoints',
+      description: 'User authentication and authorization',
     },
     {
       name: 'Users',
@@ -27,55 +27,39 @@ const swaggerDefinition = {
     },
     {
       name: 'Account Groups',
-      description: 'Organization and categorization of financial accounts and crypto wallets',
+      description: 'Organization and categorization of accounts',
     },
     {
-      name: 'Financial Accounts',
-      description: 'Traditional bank accounts and financial institutions',
-    },
-    {
-      name: 'Crypto - Wallets',
-      description: 'Cryptocurrency wallet management and portfolio tracking',
-    },
-    {
-      name: 'Crypto - Transactions',
-      description: 'Blockchain transaction history and analysis',
-    },
-    {
-      name: 'Crypto - NFTs',
-      description: 'Non-fungible token collection and metadata',
-    },
-    {
-      name: 'Crypto - DeFi',
-      description: 'Decentralized Finance positions and protocols',
-    },
-    {
-      name: 'Crypto - Portfolio',
-      description: 'Aggregated portfolio analytics and performance',
-    },
-    {
-      name: 'Crypto - Analytics',
-      description: 'Advanced portfolio analytics and insights',
-    },
-    {
-      name: 'Crypto - Sync',
-      description: 'Wallet synchronization and data refresh',
-    },
-    {
-      name: 'Crypto - Export',
-      description: 'Portfolio data export and reporting',
+      name: 'Crypto',
+      description: 'Cryptocurrency wallets, transactions, NFTs, and DeFi',
     },
     {
       name: 'Subscriptions',
       description: 'Plan management and billing',
     },
     {
-      name: 'Payments',
-      description: 'Payment processing and history',
-    },
-    {
       name: 'Usage',
       description: 'Usage tracking and limits',
+    },
+    {
+      name: 'Admin Dashboard',
+      description: 'Admin dashboard overview and key metrics',
+    },
+    {
+      name: 'Admin Analytics',
+      description: 'Advanced analytics and reporting for administrators',
+    },
+    {
+      name: 'Admin User Management',
+      description: 'User management and administration functions',
+    },
+    {
+      name: 'Admin System',
+      description: 'System monitoring and health checks',
+    },
+    {
+      name: 'Admin Audit',
+      description: 'Audit logs and security monitoring',
     },
   ],
   servers: [
@@ -108,57 +92,23 @@ const swaggerDefinition = {
       ApiResponse: {
         type: 'object',
         properties: {
-          success: {
-            type: 'boolean',
-            description: 'Indicates if the request was successful',
-          },
-          message: {
-            type: 'string',
-            description: 'Response message',
-          },
-          data: {
-            type: 'object',
-            description: 'Response data',
-          },
-          timestamp: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Response timestamp',
-          },
+          success: { type: 'boolean' },
+          message: { type: 'string' },
+          data: { type: 'object' },
         },
         required: ['success'],
       },
       ErrorResponse: {
         type: 'object',
         properties: {
-          success: {
-            type: 'boolean',
-            example: false,
-          },
+          success: { type: 'boolean', example: false },
           error: {
             type: 'object',
             properties: {
-              message: {
-                type: 'string',
-                description: 'Error message',
-              },
-              statusCode: {
-                type: 'number',
-                description: 'HTTP status code',
-              },
-              timestamp: {
-                type: 'string',
-                format: 'date-time',
-              },
-              suggestions: {
-                type: 'array',
-                items: {
-                  type: 'string',
-                },
-                description: 'Helpful suggestions for resolving the error',
-              },
+              message: { type: 'string' },
+              statusCode: { type: 'number' },
             },
-            required: ['message', 'statusCode', 'timestamp'],
+            required: ['message', 'statusCode'],
           },
         },
         required: ['success', 'error'],
@@ -167,82 +117,16 @@ const swaggerDefinition = {
       User: {
         type: 'object',
         properties: {
-          id: {
-            type: 'string',
-            description: 'User unique identifier',
-            example: 'clm123abc456def789',
-          },
-          email: {
-            type: 'string',
-            format: 'email',
-            description: 'User email address',
-            example: 'user@example.com',
-          },
-          firstName: {
-            type: 'string',
-            description: 'User first name',
-            example: 'John',
-          },
-          lastName: {
-            type: 'string',
-            description: 'User last name',
-            example: 'Doe',
-          },
-          role: {
-            type: 'string',
-            enum: ['USER', 'ADMIN', 'PREMIUM'],
-            description: 'User role',
-            example: 'USER',
-          },
-          status: {
-            type: 'string',
-            enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION'],
-            description: 'User account status',
-            example: 'ACTIVE',
-          },
-          emailVerified: {
-            type: 'boolean',
-            description: 'Whether user email is verified',
-            example: true,
-          },
-          phone: {
-            type: 'string',
-            nullable: true,
-            description: 'User phone number',
-            example: '+1234567890',
-          },
-          dateOfBirth: {
-            type: 'string',
-            format: 'date-time',
-            nullable: true,
-            description: 'User date of birth',
-          },
-          monthlyIncome: {
-            type: 'number',
-            nullable: true,
-            description: 'User monthly income',
-            example: 5000.0,
-          },
-          currency: {
-            type: 'string',
-            description: 'User preferred currency',
-            example: 'USD',
-          },
-          timezone: {
-            type: 'string',
-            description: 'User timezone',
-            example: 'UTC',
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Account creation timestamp',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Last update timestamp',
-          },
+          id: { type: 'string', example: 'clm123abc456def789' },
+          email: { type: 'string', format: 'email', example: 'user@example.com' },
+          firstName: { type: 'string', example: 'John' },
+          lastName: { type: 'string', example: 'Doe' },
+          role: { type: 'string', enum: ['USER', 'ADMIN', 'PREMIUM'], example: 'USER' },
+          status: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION'], example: 'ACTIVE' },
+          emailVerified: { type: 'boolean', example: true },
+          currency: { type: 'string', example: 'USD' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
         },
         required: ['id', 'email', 'firstName', 'lastName', 'role', 'status', 'emailVerified'],
       },
@@ -250,715 +134,124 @@ const swaggerDefinition = {
       RegisterRequest: {
         type: 'object',
         properties: {
-          email: {
-            type: 'string',
-            format: 'email',
-            description: 'User email address',
-            example: 'user@example.com',
-          },
-          password: {
-            type: 'string',
-            minLength: 8,
-            description:
-              'User password (min 8 chars, must contain uppercase, lowercase, number, and special character)',
-            example: 'SecurePassword123!',
-          },
-          firstName: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 50,
-            description: 'User first name',
-            example: 'John',
-          },
-          lastName: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 50,
-            description: 'User last name',
-            example: 'Doe',
-          },
-          phone: {
-            type: 'string',
-            pattern: '^\\+?[\\d\\s\\-()]+$',
-            description: 'User phone number (optional)',
-            example: '+1234567890',
-          },
-          dateOfBirth: {
-            type: 'string',
-            format: 'date-time',
-            description: 'User date of birth (optional)',
-          },
+          email: { type: 'string', format: 'email', example: 'user@example.com' },
+          password: { type: 'string', minLength: 8, example: 'SecurePassword123!' },
+          firstName: { type: 'string', minLength: 1, maxLength: 50, example: 'John' },
+          lastName: { type: 'string', minLength: 1, maxLength: 50, example: 'Doe' },
         },
         required: ['email', 'password', 'firstName', 'lastName'],
       },
       LoginRequest: {
         type: 'object',
         properties: {
-          email: {
-            type: 'string',
-            format: 'email',
-            description: 'User email address',
-            example: 'user@example.com',
-          },
-          password: {
-            type: 'string',
-            description: 'User password',
-            example: 'SecurePassword123!',
-          },
+          email: { type: 'string', format: 'email', example: 'user@example.com' },
+          password: { type: 'string', example: 'SecurePassword123!' },
         },
         required: ['email', 'password'],
       },
       AuthResponse: {
         type: 'object',
         properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          message: {
-            type: 'string',
-            example: 'Authentication successful',
-          },
+          success: { type: 'boolean', example: true },
           data: {
             type: 'object',
             properties: {
-              user: {
-                $ref: '#/components/schemas/User',
-              },
-              token: {
-                type: 'string',
-                description: 'JWT access token',
-                example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-              },
+              user: { $ref: '#/components/schemas/User' },
+              token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
             },
-            required: ['user', 'token'],
           },
         },
         required: ['success', 'data'],
       },
-      TokenRefreshRequest: {
-        type: 'object',
-        properties: {
-          refreshToken: {
-            type: 'string',
-            description: 'Refresh token (can also be sent via cookie)',
-            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-          },
-        },
-      },
-      ForgotPasswordRequest: {
-        type: 'object',
-        properties: {
-          email: {
-            type: 'string',
-            format: 'email',
-            description: 'User email address',
-            example: 'user@example.com',
-          },
-        },
-        required: ['email'],
-      },
-      ResetPasswordRequest: {
-        type: 'object',
-        properties: {
-          token: {
-            type: 'string',
-            description: 'Password reset token',
-            example: 'abc123def456',
-          },
-          password: {
-            type: 'string',
-            minLength: 8,
-            description: 'New password',
-            example: 'NewSecurePassword123!',
-          },
-        },
-        required: ['token', 'password'],
-      },
-      ChangePasswordRequest: {
-        type: 'object',
-        properties: {
-          currentPassword: {
-            type: 'string',
-            description: 'Current password',
-            example: 'CurrentPassword123!',
-          },
-          newPassword: {
-            type: 'string',
-            minLength: 8,
-            description: 'New password',
-            example: 'NewSecurePassword123!',
-          },
-        },
-        required: ['currentPassword', 'newPassword'],
-      },
-      VerifyEmailRequest: {
-        type: 'object',
-        properties: {
-          token: {
-            type: 'string',
-            description: 'Email verification token',
-            example: 'abc123def456',
-          },
-        },
-        required: ['token'],
-      },
       UserStats: {
         type: 'object',
         properties: {
-          accounts: {
-            type: 'integer',
-            description: 'Number of user accounts',
-            example: 3,
-          },
-          transactions: {
-            type: 'integer',
-            description: 'Number of transactions',
-            example: 150,
-          },
-          categories: {
-            type: 'integer',
-            description: 'Number of categories',
-            example: 12,
-          },
-          budgets: {
-            type: 'integer',
-            description: 'Number of budgets',
-            example: 5,
-          },
-          goals: {
-            type: 'integer',
-            description: 'Number of goals',
-            example: 3,
-          },
+          accounts: { type: 'integer', example: 3 },
+          transactions: { type: 'integer', example: 150 },
+          categories: { type: 'integer', example: 12 },
+          budgets: { type: 'integer', example: 5 },
+          goals: { type: 'integer', example: 3 },
+          currentPlan: { type: 'string', example: 'PRO' },
         },
         required: ['accounts', 'transactions', 'categories', 'budgets', 'goals'],
       },
       // Payment schemas
-      PaymentIntent: {
-        type: 'object',
-        properties: {
-          paymentIntentId: {
-            type: 'string',
-            description: 'Payment intent ID',
-          },
-          clientSecret: {
-            type: 'string',
-            description: 'Client secret for payment processing',
-          },
-          amount: {
-            type: 'number',
-            description: 'Amount in cents',
-          },
-          currency: {
-            type: 'string',
-            description: 'Currency code',
-            example: 'USD',
-          },
-          requiresPayment: {
-            type: 'boolean',
-            description: 'Whether payment is required',
-          },
-        },
-      },
       Payment: {
         type: 'object',
         properties: {
-          id: {
-            type: 'string',
-            description: 'Payment unique identifier',
-          },
-          subscriptionId: {
-            type: 'string',
-            description: 'Associated subscription ID',
-          },
-          amount: {
-            type: 'number',
-            description: 'Payment amount',
-          },
-          currency: {
-            type: 'string',
-            description: 'Currency code',
-            example: 'USD',
-          },
-          status: {
-            type: 'string',
-            enum: ['PENDING', 'SUCCEEDED', 'FAILED', 'CANCELED'],
-            description: 'Payment status',
-          },
-          paymentDate: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Payment date',
-          },
-          processedAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'When payment was processed',
-          },
-          failureReason: {
-            type: 'string',
-            description: 'Reason for payment failure',
-          },
+          id: { type: 'string' },
+          amount: { type: 'number' },
+          currency: { type: 'string', example: 'USD' },
+          status: { type: 'string', enum: ['PENDING', 'SUCCEEDED', 'FAILED', 'CANCELED'] },
+          paymentDate: { type: 'string', format: 'date-time' },
         },
       },
       // Usage schemas
       UsageLimit: {
         type: 'object',
         properties: {
-          feature: {
-            type: 'string',
-            description: 'Feature name',
-          },
-          limit: {
-            type: 'number',
-            description: 'Maximum allowed usage (-1 for unlimited)',
-          },
-          current: {
-            type: 'number',
-            description: 'Current usage count',
-          },
-          remaining: {
-            type: 'number',
-            description: 'Remaining usage count (-1 for unlimited)',
-          },
-          resetDate: {
-            type: 'string',
-            format: 'date-time',
-            description: 'When the limit resets (if applicable)',
-          },
+          feature: { type: 'string' },
+          limit: { type: 'number' },
+          current: { type: 'number' },
+          remaining: { type: 'number' },
         },
         required: ['feature', 'limit', 'current', 'remaining'],
-      },
-      UsageRecord: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'Usage record ID',
-          },
-          userId: {
-            type: 'string',
-            description: 'User ID',
-          },
-          feature: {
-            type: 'string',
-            description: 'Feature used',
-          },
-          action: {
-            type: 'string',
-            description: 'Action performed',
-          },
-          timestamp: {
-            type: 'string',
-            format: 'date-time',
-            description: 'When the usage occurred',
-          },
-          metadata: {
-            type: 'object',
-            description: 'Additional usage metadata',
-          },
-        },
       },
       // Subscription schemas
       Plan: {
         type: 'object',
         properties: {
-          id: {
-            type: 'string',
-            description: 'Plan unique identifier',
-          },
-          type: {
-            type: 'string',
-            enum: ['FREE', 'PRO', 'ULTIMATE'],
-            description: 'Plan type',
-          },
-          name: {
-            type: 'string',
-            description: 'Plan name',
-            example: 'Pro',
-          },
-          description: {
-            type: 'string',
-            description: 'Plan description',
-          },
-          monthlyPrice: {
-            type: 'number',
-            description: 'Monthly price in USD',
-            example: 19.99,
-          },
-          yearlyPrice: {
-            type: 'number',
-            description: 'Yearly price in USD',
-            example: 199.99,
-          },
-          popular: {
-            type: 'boolean',
-            description: 'Whether this plan is marked as popular',
-          },
-          yearlyDiscount: {
-            type: 'number',
-            description: 'Yearly discount percentage',
-            example: 17,
-          },
-          trialDays: {
-            type: 'integer',
-            description: 'Number of trial days',
-            example: 14,
-          },
-          features: {
-            type: 'object',
-            properties: {
-              maxAccounts: {
-                type: 'integer',
-                description: 'Maximum number of accounts (-1 for unlimited)',
-              },
-              maxTransactions: {
-                type: 'integer',
-                description: 'Maximum number of transactions (-1 for unlimited)',
-              },
-              maxCategories: {
-                type: 'integer',
-                description: 'Maximum number of categories (-1 for unlimited)',
-              },
-              maxBudgets: {
-                type: 'integer',
-                description: 'Maximum number of budgets (-1 for unlimited)',
-              },
-              maxGoals: {
-                type: 'integer',
-                description: 'Maximum number of goals (-1 for unlimited)',
-              },
-              aiInsights: {
-                type: 'boolean',
-                description: 'AI-powered insights available',
-              },
-              advancedReports: {
-                type: 'boolean',
-                description: 'Advanced reporting available',
-              },
-              prioritySupport: {
-                type: 'boolean',
-                description: 'Priority customer support',
-              },
-              apiAccess: {
-                type: 'boolean',
-                description: 'API access available',
-              },
-              exportData: {
-                type: 'boolean',
-                description: 'Data export functionality',
-              },
-              customCategories: {
-                type: 'boolean',
-                description: 'Custom categories creation',
-              },
-            },
-          },
+          id: { type: 'string' },
+          type: { type: 'string', enum: ['FREE', 'PRO', 'ULTIMATE'] },
+          name: { type: 'string', example: 'Pro' },
+          monthlyPrice: { type: 'number', example: 19.99 },
+          yearlyPrice: { type: 'number', example: 199.99 },
         },
       },
-      UserSubscription: {
+      Subscription: {
         type: 'object',
         properties: {
-          currentPlan: {
-            type: 'string',
-            enum: ['FREE', 'PRO', 'ULTIMATE'],
-            description: 'Current plan type',
-          },
-          subscription: {
-            type: 'object',
-            nullable: true,
-            properties: {
-              id: {
-                type: 'string',
-                description: 'Subscription ID',
-              },
-              status: {
-                type: 'string',
-                enum: ['ACTIVE', 'CANCELLED', 'PAST_DUE', 'TRIAL', 'EXPIRED'],
-                description: 'Subscription status',
-              },
-              billingPeriod: {
-                type: 'string',
-                enum: ['MONTHLY', 'YEARLY'],
-                description: 'Billing period',
-              },
-              amount: {
-                type: 'number',
-                description: 'Subscription amount',
-              },
-              currentPeriodStart: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Current billing period start',
-              },
-              currentPeriodEnd: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Current billing period end',
-              },
-              trialEnd: {
-                type: 'string',
-                format: 'date-time',
-                nullable: true,
-                description: 'Trial end date',
-              },
-              cancelAt: {
-                type: 'string',
-                format: 'date-time',
-                nullable: true,
-                description: 'Scheduled cancellation date',
-              },
-            },
-          },
+          id: { type: 'string' },
+          status: { type: 'string', enum: ['ACTIVE', 'CANCELLED', 'PAST_DUE', 'TRIAL', 'EXPIRED'] },
+          billingPeriod: { type: 'string', enum: ['MONTHLY', 'YEARLY'] },
+          amount: { type: 'number' },
+          currentPeriodEnd: { type: 'string', format: 'date-time' },
         },
       },
       BlockchainNetwork: {
         type: 'string',
-        enum: [
-          'ETHEREUM',
-          'POLYGON',
-          'BSC',
-          'AVALANCHE',
-          'ARBITRUM',
-          'OPTIMISM',
-          'BASE',
-          'FANTOM',
-          'SOLANA',
-        ],
-        description: 'Supported blockchain networks',
+        enum: ['ETHEREUM', 'POLYGON', 'BSC', 'AVALANCHE', 'ARBITRUM', 'OPTIMISM', 'BASE', 'FANTOM', 'SOLANA'],
         example: 'ETHEREUM',
       },
       TokenBalance: {
         type: 'object',
         properties: {
-          token_address: {
-            type: 'string',
-            description: 'Token contract address',
-            example: '0xdac17f958d2ee523a2206206994597c13d831ec7',
-          },
-          symbol: {
-            type: 'string',
-            description: 'Token symbol',
-            example: 'USDT',
-          },
-          name: {
-            type: 'string',
-            description: 'Token name',
-            example: 'Tether USD',
-          },
-          balance: {
-            type: 'string',
-            description: 'Raw token balance',
-            example: '1000000000',
-          },
-          balance_formatted: {
-            type: 'string',
-            description: 'Formatted token balance',
-            example: '1000.0',
-          },
-          decimals: {
-            type: 'number',
-            description: 'Token decimals',
-            example: 6,
-          },
-          logo: {
-            type: 'string',
-            nullable: true,
-            description: 'Token logo URL',
-            example:
-              'https://logo.moralis.io/0x1_0xdac17f958d2ee523a2206206994597c13d831ec7_a578c5277503e5b0972f1d9b99c6dd8c',
-          },
-          verified_contract: {
-            type: 'boolean',
-            nullable: true,
-            description: 'Whether contract is verified',
-            example: true,
-          },
-          possible_spam: {
-            type: 'boolean',
-            nullable: true,
-            description: 'Whether token is potentially spam',
-            example: false,
-          },
-          usd_price: {
-            type: 'number',
-            nullable: true,
-            description: 'Current USD price per token',
-            example: 1.0,
-          },
-          usd_value: {
-            type: 'number',
-            nullable: true,
-            description: 'Total USD value of holdings',
-            example: 1000.0,
-          },
-          percentage_relative_to_total_supply: {
-            type: 'number',
-            nullable: true,
-            description: 'Percentage of total supply held',
-            example: 0.001,
-          },
+          token_address: { type: 'string', example: '0xdac17f958d2ee523a2206206994597c13d831ec7' },
+          symbol: { type: 'string', example: 'USDT' },
+          name: { type: 'string', example: 'Tether USD' },
+          balance_formatted: { type: 'string', example: '1000.0' },
+          decimals: { type: 'number', example: 6 },
+          usd_price: { type: 'number', example: 1.0 },
+          usd_value: { type: 'number', example: 1000.0 },
         },
-        required: ['token_address', 'symbol', 'name', 'balance', 'balance_formatted', 'decimals'],
-      },
-      NFTMetadata: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            nullable: true,
-            description: 'NFT name',
-            example: 'Cool NFT #1234',
-          },
-          description: {
-            type: 'string',
-            nullable: true,
-            description: 'NFT description',
-            example: 'A really cool NFT',
-          },
-          image: {
-            type: 'string',
-            nullable: true,
-            description: 'NFT image URL',
-            example: 'https://ipfs.io/ipfs/QmXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-          },
-          animation_url: {
-            type: 'string',
-            nullable: true,
-            description: 'NFT animation URL',
-          },
-          external_url: {
-            type: 'string',
-            nullable: true,
-            description: 'External URL',
-          },
-          attributes: {
-            type: 'array',
-            nullable: true,
-            items: {
-              type: 'object',
-              properties: {
-                trait_type: { type: 'string' },
-                value: { type: 'string' },
-              },
-            },
-            description: 'NFT attributes',
-          },
-        },
+        required: ['token_address', 'symbol', 'name', 'balance_formatted', 'decimals'],
       },
       NFT: {
         type: 'object',
         properties: {
-          token_address: {
-            type: 'string',
-            description: 'NFT contract address',
-            example: '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d',
-          },
-          token_id: {
-            type: 'string',
-            description: 'NFT token ID',
-            example: '1234',
-          },
-          contract_type: {
-            type: 'string',
-            description: 'Contract type (ERC721, ERC1155)',
-            example: 'ERC721',
-          },
-          token_uri: {
-            type: 'string',
-            nullable: true,
-            description: 'Token metadata URI',
-            example: 'https://ipfs.io/ipfs/QmXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-          },
-          metadata: {
-            type: 'object',
-            nullable: true,
-            description: 'Raw metadata',
-          },
-          normalized_metadata: {
-            $ref: '#/components/schemas/NFTMetadata',
-            nullable: true,
-          },
-          amount: {
-            type: 'string',
-            nullable: true,
-            description: 'Amount held (for ERC1155)',
-            example: '1',
-          },
-          name: {
-            type: 'string',
-            nullable: true,
-            description: 'Collection name',
-            example: 'Bored Ape Yacht Club',
-          },
-          symbol: {
-            type: 'string',
-            nullable: true,
-            description: 'Collection symbol',
-            example: 'BAYC',
-          },
-          block_number_minted: {
-            type: 'string',
-            nullable: true,
-            description: 'Block number when minted',
-            example: '12345678',
-          },
-          possible_spam: {
-            type: 'boolean',
-            nullable: true,
-            description: 'Whether NFT is potentially spam',
-            example: false,
-          },
-          verified_collection: {
-            type: 'boolean',
-            nullable: true,
-            description: 'Whether collection is verified',
-            example: true,
-          },
-          floor_price_usd: {
-            type: 'number',
-            nullable: true,
-            description: 'Collection floor price in USD',
-            example: 25000.0,
-          },
+          token_address: { type: 'string', example: '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d' },
+          token_id: { type: 'string', example: '1234' },
+          name: { type: 'string', example: 'Cool NFT #1234' },
+          image: { type: 'string', example: 'https://ipfs.io/ipfs/QmXXX...' },
+          floor_price_usd: { type: 'number', example: 25000.0 },
         },
-        required: ['token_address', 'token_id', 'contract_type'],
+        required: ['token_address', 'token_id'],
       },
       DeFiProtocol: {
         type: 'object',
         properties: {
-          protocol: {
-            type: 'string',
-            description: 'Protocol name',
-            example: 'uniswap-v3',
-          },
-          total_usd_value: {
-            type: 'number',
-            description: 'Total USD value in protocol',
-            example: 5000.0,
-          },
-          positions: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                label: { type: 'string' },
-                tokens: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      symbol: { type: 'string' },
-                      balance: { type: 'string' },
-                      balance_formatted: { type: 'string' },
-                      usd_value: { type: 'number' },
-                    },
-                  },
-                },
-              },
-            },
-          },
+          protocol: { type: 'string', example: 'uniswap-v3' },
+          total_usd_value: { type: 'number', example: 5000.0 },
         },
         required: ['protocol', 'total_usd_value'],
       },
@@ -966,460 +259,42 @@ const swaggerDefinition = {
       AccountGroup: {
         type: 'object',
         properties: {
-          id: {
-            type: 'string',
-            description: 'Account group unique identifier',
-            example: 'clm123abc456def789',
-          },
-          userId: {
-            type: 'string',
-            description: 'User ID who owns the group',
-            example: 'clm123abc456def789',
-          },
-          name: {
-            type: 'string',
-            description: 'Group name',
-            example: 'Personal Banking',
-            maxLength: 100,
-          },
-          description: {
-            type: 'string',
-            nullable: true,
-            description: 'Group description',
-            example: 'Personal checking and savings accounts',
-            maxLength: 500,
-          },
-          icon: {
-            type: 'string',
-            nullable: true,
-            description: 'Group icon (emoji or unicode)',
-            example: '🏦',
-            maxLength: 50,
-          },
-          color: {
-            type: 'string',
-            nullable: true,
-            description: 'Group color (hex code)',
-            example: '#3B82F6',
-            pattern: '^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$',
-          },
-          sortOrder: {
-            type: 'integer',
-            description: 'Sort order for display',
-            example: 0,
-            minimum: 0,
-          },
-          parentId: {
-            type: 'string',
-            nullable: true,
-            description: 'Parent group ID for hierarchical structure',
-            example: 'clm123parent456def',
-          },
-          isDefault: {
-            type: 'boolean',
-            description: 'Whether this is a system default group',
-            example: false,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Creation timestamp',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Last update timestamp',
-          },
-          financialAccounts: {
-            type: 'array',
-            description: 'Financial accounts in this group',
-            items: {
-              $ref: '#/components/schemas/FinancialAccount',
-            },
-          },
-          cryptoWallets: {
-            type: 'array',
-            description: 'Crypto wallets in this group',
-            items: {
-              $ref: '#/components/schemas/CryptoWallet',
-            },
-          },
-          children: {
-            type: 'array',
-            description: 'Child groups (for hierarchical structure)',
-            items: {
-              $ref: '#/components/schemas/AccountGroup',
-            },
-          },
-          _count: {
-            type: 'object',
-            description: 'Count of related entities',
-            properties: {
-              financialAccounts: { type: 'integer' },
-              cryptoWallets: { type: 'integer' },
-              children: { type: 'integer' },
-            },
-          },
+          id: { type: 'string', example: 'clm123abc456def789' },
+          name: { type: 'string', example: 'Personal Banking' },
+          description: { type: 'string', example: 'Personal checking and savings accounts' },
+          icon: { type: 'string', example: '🏦' },
+          color: { type: 'string', example: '#3B82F6' },
+          createdAt: { type: 'string', format: 'date-time' },
         },
-        required: ['id', 'userId', 'name', 'sortOrder', 'isDefault', 'createdAt', 'updatedAt'],
+        required: ['id', 'name'],
       },
       CreateAccountGroupRequest: {
         type: 'object',
         properties: {
-          name: {
-            type: 'string',
-            description: 'Group name',
-            example: 'Personal Banking',
-            minLength: 1,
-            maxLength: 100,
-          },
-          description: {
-            type: 'string',
-            description: 'Group description (optional)',
-            example: 'Personal checking and savings accounts',
-            maxLength: 500,
-          },
-          icon: {
-            type: 'string',
-            description: 'Group icon (optional)',
-            example: '🏦',
-            maxLength: 50,
-          },
-          color: {
-            type: 'string',
-            description: 'Group color in hex format (optional)',
-            example: '#3B82F6',
-            pattern: '^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$',
-          },
-          parentId: {
-            type: 'string',
-            description: 'Parent group ID (optional)',
-            example: 'clm123parent456def',
-          },
+          name: { type: 'string', example: 'Personal Banking', minLength: 1, maxLength: 100 },
+          description: { type: 'string', example: 'Personal checking and savings accounts' },
+          icon: { type: 'string', example: '🏦' },
+          color: { type: 'string', example: '#3B82F6' },
         },
         required: ['name'],
-      },
-      UpdateAccountGroupRequest: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Updated group name',
-            example: 'Business Banking',
-            minLength: 1,
-            maxLength: 100,
-          },
-          description: {
-            type: 'string',
-            nullable: true,
-            description: 'Updated group description',
-            example: 'Business accounts and corporate banking',
-            maxLength: 500,
-          },
-          icon: {
-            type: 'string',
-            nullable: true,
-            description: 'Updated group icon',
-            example: '🏢',
-            maxLength: 50,
-          },
-          color: {
-            type: 'string',
-            nullable: true,
-            description: 'Updated group color',
-            example: '#10B981',
-            pattern: '^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$',
-          },
-          parentId: {
-            type: 'string',
-            nullable: true,
-            description: 'Updated parent group ID',
-            example: 'clm123newparent456',
-          },
-          sortOrder: {
-            type: 'integer',
-            description: 'Updated sort order',
-            example: 1,
-            minimum: 0,
-          },
-        },
-      },
-      MoveAccountRequest: {
-        type: 'object',
-        properties: {
-          accountId: {
-            type: 'string',
-            description: 'Account ID to move',
-            example: 'clm123account456def',
-          },
-          groupId: {
-            type: 'string',
-            nullable: true,
-            description: 'Target group ID (null to remove from group)',
-            example: 'clm123group456def',
-          },
-          accountType: {
-            type: 'string',
-            enum: ['financial', 'crypto'],
-            description: 'Type of account to move',
-            example: 'financial',
-          },
-        },
-        required: ['accountId', 'accountType'],
-      },
-      FinancialAccount: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'Account unique identifier',
-            example: 'clm123account456def',
-          },
-          name: {
-            type: 'string',
-            description: 'Account name',
-            example: 'Chase Checking',
-          },
-          type: {
-            type: 'string',
-            enum: [
-              'CHECKING',
-              'SAVINGS',
-              'CREDIT_CARD',
-              'INVESTMENT',
-              'LOAN',
-              'MORTGAGE',
-              'CRYPTO',
-            ],
-            description: 'Account type',
-            example: 'CHECKING',
-          },
-          balance: {
-            type: 'number',
-            description: 'Account balance',
-            example: 1250.5,
-          },
-          currency: {
-            type: 'string',
-            description: 'Account currency',
-            example: 'USD',
-          },
-          institutionName: {
-            type: 'string',
-            nullable: true,
-            description: 'Financial institution name',
-            example: 'Chase Bank',
-          },
-          groupId: {
-            type: 'string',
-            nullable: true,
-            description: 'Associated group ID',
-            example: 'clm123group456def',
-          },
-          isActive: {
-            type: 'boolean',
-            description: 'Whether account is active',
-            example: true,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Creation timestamp',
-          },
-        },
-        required: ['id', 'name', 'type', 'balance', 'currency', 'isActive'],
       },
       CryptoWallet: {
         type: 'object',
         properties: {
-          id: {
-            type: 'string',
-            description: 'Wallet unique identifier',
-            example: 'clm123wallet456def',
-          },
-          name: {
-            type: 'string',
-            description: 'Wallet name',
-            example: 'MetaMask Wallet',
-          },
-          address: {
-            type: 'string',
-            description: 'Wallet address',
-            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
-          },
-          network: {
-            $ref: '#/components/schemas/BlockchainNetwork',
-          },
-          type: {
-            type: 'string',
-            enum: ['HOT_WALLET', 'COLD_WALLET', 'EXCHANGE', 'MULTI_SIG', 'SMART_CONTRACT'],
-            description: 'Wallet type',
-            example: 'HOT_WALLET',
-          },
-          totalBalanceUsd: {
-            type: 'number',
-            description: 'Total balance in USD',
-            example: 5000.75,
-          },
-          groupId: {
-            type: 'string',
-            nullable: true,
-            description: 'Associated group ID',
-            example: 'clm123group456def',
-          },
-          isActive: {
-            type: 'boolean',
-            description: 'Whether wallet is active',
-            example: true,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Creation timestamp',
-          },
+          id: { type: 'string', example: 'clm123wallet456def' },
+          name: { type: 'string', example: 'MetaMask Wallet' },
+          address: { type: 'string', example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2' },
+          network: { $ref: '#/components/schemas/BlockchainNetwork' },
+          totalBalanceUsd: { type: 'number', example: 5000.75 },
         },
-        required: ['id', 'name', 'address', 'network', 'type', 'totalBalanceUsd', 'isActive'],
+        required: ['id', 'name', 'address', 'network', 'totalBalanceUsd'],
       },
-      // Flexible Crypto Request Schemas
-      GetWalletDetailsFlexibleRequest: {
-        type: 'object',
-        properties: {
-          walletId: {
-            type: 'string',
-            description: 'Wallet ID (CUID)',
-            example: 'clm123wallet456def',
-          },
-          address: {
-            type: 'string',
-            description: 'Wallet address (0x... or base58)',
-            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
-          },
-          timeRange: {
-            type: 'string',
-            enum: ['24h', '7d', '30d', '90d', '1y', 'all'],
-            description: 'Time range for portfolio data',
-            example: '7d',
-          },
-        },
-        additionalProperties: false,
-        oneOf: [
-          { required: ['walletId'] },
-          { required: ['address'] }
-        ],
-      },
-      GetWalletTransactionsFlexibleRequest: {
-        type: 'object',
-        properties: {
-          walletId: {
-            type: 'string',
-            description: 'Wallet ID (CUID)',
-            example: 'clm123wallet456def',
-          },
-          address: {
-            type: 'string',
-            description: 'Wallet address (0x... or base58)',
-            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
-          },
-          page: {
-            type: 'integer',
-            minimum: 1,
-            description: 'Page number for pagination',
-            example: 1,
-          },
-          limit: {
-            type: 'integer',
-            minimum: 1,
-            maximum: 100,
-            description: 'Number of transactions per page',
-            example: 20,
-          },
-        },
-        additionalProperties: false,
-        oneOf: [
-          { required: ['walletId'] },
-          { required: ['address'] }
-        ],
-      },
-      GetWalletNFTsFlexibleRequest: {
-        type: 'object',
-        properties: {
-          walletId: {
-            type: 'string',
-            description: 'Wallet ID (CUID)',
-            example: 'clm123wallet456def',
-          },
-          address: {
-            type: 'string',
-            description: 'Wallet address (0x... or base58)',
-            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
-          },
-          page: {
-            type: 'integer',
-            minimum: 1,
-            description: 'Page number for pagination',
-            example: 1,
-          },
-          limit: {
-            type: 'integer',
-            minimum: 1,
-            maximum: 100,
-            description: 'Number of NFTs per page',
-            example: 20,
-          },
-        },
-        additionalProperties: false,
-        oneOf: [
-          { required: ['walletId'] },
-          { required: ['address'] }
-        ],
-      },
-      GetWalletDeFiFlexibleRequest: {
-        type: 'object',
-        properties: {
-          walletId: {
-            type: 'string',
-            description: 'Wallet ID (CUID)',
-            example: 'clm123wallet456def',
-          },
-          address: {
-            type: 'string',
-            description: 'Wallet address (0x... or base58)',
-            example: '0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2',
-          },
-          page: {
-            type: 'integer',
-            minimum: 1,
-            description: 'Page number for pagination',
-            example: 1,
-          },
-          limit: {
-            type: 'integer',
-            minimum: 1,
-            maximum: 100,
-            description: 'Number of DeFi positions per page',
-            example: 20,
-          },
-        },
-        additionalProperties: false,
-        oneOf: [
-          { required: ['walletId'] },
-          { required: ['address'] }
-        ],
-      },
-      // Portfolio and Transaction Response Schemas
+      // Portfolio schemas
       PortfolioSummary: {
         type: 'object',
         properties: {
-          totalValue: {
-            type: 'number',
-            description: 'Total portfolio value in USD',
-            example: 15000.50,
-          },
-          totalAssets: {
-            type: 'integer',
-            description: 'Total number of assets',
-            example: 25,
-          },
+          totalValue: { type: 'number', example: 15000.50 },
+          totalAssets: { type: 'integer', example: 25 },
           dailyChange: {
             type: 'object',
             properties: {
@@ -1427,128 +302,32 @@ const swaggerDefinition = {
               percentage: { type: 'number', example: 1.05 },
             },
           },
-          assets: {
-            type: 'array',
-            description: 'Individual assets in portfolio',
-            items: {
-              type: 'object',
-              properties: {
-                symbol: { type: 'string', example: 'ETH' },
-                name: { type: 'string', example: 'Ethereum' },
-                balance: { type: 'string', example: '2.5' },
-                value: { type: 'number', example: 4500.75 },
-                price: { type: 'number', example: 1800.30 },
-              },
-            },
-          },
         },
-        required: ['totalValue', 'totalAssets', 'assets'],
-      },
-      PaginatedTransactions: {
-        type: 'object',
-        properties: {
-          success: { type: 'boolean', example: true },
-          data: {
-            type: 'object',
-            properties: {
-              transactions: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string', example: 'tx123' },
-                    hash: { type: 'string', example: '0x123abc...' },
-                    type: { type: 'string', enum: ['SEND', 'RECEIVE', 'SWAP', 'STAKE', 'UNSTAKE'] },
-                    amount: { type: 'string', example: '1.5' },
-                    symbol: { type: 'string', example: 'ETH' },
-                    timestamp: { type: 'string', format: 'date-time' },
-                  },
-                },
-              },
-              pagination: {
-                type: 'object',
-                properties: {
-                  currentPage: { type: 'integer', example: 1 },
-                  totalPages: { type: 'integer', example: 5 },
-                  totalItems: { type: 'integer', example: 100 },
-                },
-              },
-            },
-          },
-        },
-      },
-      PaginatedNFTs: {
-        type: 'object',
-        properties: {
-          success: { type: 'boolean', example: true },
-          data: {
-            type: 'object',
-            properties: {
-              nfts: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string', example: 'nft123' },
-                    contractAddress: { type: 'string', example: '0x123...' },
-                    tokenId: { type: 'string', example: '1234' },
-                    name: { type: 'string', example: 'Cool NFT #1234' },
-                    image: { type: 'string', example: 'https://...' },
-                    value: { type: 'number', example: 0.5 },
-                  },
-                },
-              },
-              pagination: {
-                type: 'object',
-                properties: {
-                  currentPage: { type: 'integer', example: 1 },
-                  totalPages: { type: 'integer', example: 3 },
-                  totalItems: { type: 'integer', example: 50 },
-                },
-              },
-            },
-          },
-        },
+        required: ['totalValue', 'totalAssets'],
       },
     },
     responses: {
       BadRequest: {
-        description: 'Bad Request - Invalid input parameters',
+        description: 'Bad Request',
         content: {
           'application/json': {
-            schema: {
-              $ref: '#/components/schemas/ErrorResponse',
-            },
+            schema: { $ref: '#/components/schemas/ErrorResponse' },
           },
         },
       },
       Unauthorized: {
-        description: 'Unauthorized - Authentication required',
+        description: 'Unauthorized',
         content: {
           'application/json': {
-            schema: {
-              $ref: '#/components/schemas/ErrorResponse',
-            },
+            schema: { $ref: '#/components/schemas/ErrorResponse' },
           },
         },
       },
       NotFound: {
-        description: 'Not Found - Resource not found',
+        description: 'Not Found',
         content: {
           'application/json': {
-            schema: {
-              $ref: '#/components/schemas/ErrorResponse',
-            },
-          },
-        },
-      },
-      InternalServerError: {
-        description: 'Internal Server Error',
-        content: {
-          'application/json': {
-            schema: {
-              $ref: '#/components/schemas/ErrorResponse',
-            },
+            schema: { $ref: '#/components/schemas/ErrorResponse' },
           },
         },
       },
@@ -1561,8 +340,262 @@ const swaggerDefinition = {
   ],
 };
 
+// Define Better Auth endpoints that aren't in route files
+const betterAuthPaths = {
+  '/api/auth/sign-up': {
+    post: {
+      summary: 'Register a new user',
+      description: 'Create a new user account with email and password',
+      tags: ['Authentication'],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              $ref: '#/components/schemas/RegisterRequest'
+            },
+            example: {
+              email: 'user@example.com',
+              password: 'SecurePassword123!',
+              firstName: 'John',
+              lastName: 'Doe'
+            }
+          }
+        }
+      },
+      responses: {
+        201: {
+          description: 'User registered successfully',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/AuthResponse'
+              }
+            }
+          }
+        },
+        400: {
+          $ref: '#/components/responses/BadRequest'
+        }
+      }
+    }
+  },
+  '/api/auth/sign-in': {
+    post: {
+      summary: 'Sign in user',
+      description: 'Authenticate user with email and password',
+      tags: ['Authentication'],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              $ref: '#/components/schemas/LoginRequest'
+            },
+            example: {
+              email: 'user@example.com',
+              password: 'SecurePassword123!'
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'User signed in successfully',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/AuthResponse'
+              }
+            }
+          }
+        },
+        401: {
+          $ref: '#/components/responses/Unauthorized'
+        }
+      }
+    }
+  },
+  '/api/auth/sign-out': {
+    post: {
+      summary: 'Sign out user',
+      description: 'Sign out the currently authenticated user',
+      tags: ['Authentication'],
+      security: [{ BearerAuth: [] }],
+      responses: {
+        200: {
+          description: 'User signed out successfully',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/ApiResponse'
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  '/api/auth/forget-password': {
+    post: {
+      summary: 'Request password reset',
+      description: 'Send password reset email to user',
+      tags: ['Authentication'],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                email: {
+                  type: 'string',
+                  format: 'email',
+                  example: 'user@example.com'
+                }
+              },
+              required: ['email']
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Password reset email sent',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/ApiResponse'
+              }
+            }
+          }
+        },
+        404: {
+          $ref: '#/components/responses/NotFound'
+        }
+      }
+    }
+  },
+  '/api/auth/reset-password': {
+    post: {
+      summary: 'Reset password',
+      description: 'Reset user password with token from email',
+      tags: ['Authentication'],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                token: {
+                  type: 'string',
+                  example: 'reset-token-here'
+                },
+                password: {
+                  type: 'string',
+                  minLength: 8,
+                  example: 'NewSecurePassword123!'
+                }
+              },
+              required: ['token', 'password']
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Password reset successfully',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/ApiResponse'
+              }
+            }
+          }
+        },
+        400: {
+          $ref: '#/components/responses/BadRequest'
+        }
+      }
+    }
+  },
+  '/api/auth/verify-email': {
+    get: {
+      summary: 'Verify email address',
+      description: 'Verify user email with token from verification email',
+      tags: ['Authentication'],
+      parameters: [
+        {
+          name: 'token',
+          in: 'query',
+          required: true,
+          schema: {
+            type: 'string'
+          },
+          example: 'verification-token-here'
+        }
+      ],
+      responses: {
+        200: {
+          description: 'Email verified successfully',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/ApiResponse'
+              }
+            }
+          }
+        },
+        400: {
+          $ref: '#/components/responses/BadRequest'
+        }
+      }
+    }
+  },
+  '/api/auth/session': {
+    get: {
+      summary: 'Get current session',
+      description: 'Retrieve the current user session information',
+      tags: ['Authentication'],
+      security: [{ BearerAuth: [] }],
+      responses: {
+        200: {
+          description: 'Session retrieved successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  user: {
+                    $ref: '#/components/schemas/User'
+                  },
+                  session: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      userId: { type: 'string' },
+                      expiresAt: { type: 'string', format: 'date-time' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        401: {
+          $ref: '#/components/responses/Unauthorized'
+        }
+      }
+    }
+  }
+};
+
 const options = {
-  definition: swaggerDefinition,
+  definition: { 
+    ...swaggerDefinition,
+    paths: betterAuthPaths 
+  },
   apis: ['./src/routes/*.ts', './src/controllers/*.ts'], // Path to the API files
 };
 

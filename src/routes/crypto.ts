@@ -89,8 +89,9 @@ router.use(authenticate);
  * @swagger
  * /api/v1/crypto/wallets:
  *   get:
- *     summary: Get all user's crypto wallets
- *     tags: [Crypto - Wallets]
+ *     summary: Get all crypto wallets
+ *     description: Retrieve all crypto wallets for the authenticated user
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     responses:
@@ -99,18 +100,9 @@ router.use(authenticate);
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/CryptoWallet'
+ *               $ref: '#/components/schemas/ApiResponse'
  *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       429:
- *         $ref: '#/components/responses/RateLimitError'
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/wallets', cryptoController.getUserWallets.bind(cryptoController));
 
@@ -119,7 +111,8 @@ router.get('/wallets', cryptoController.getUserWallets.bind(cryptoController));
  * /api/v1/crypto/wallets:
  *   post:
  *     summary: Add a new crypto wallet
- *     tags: [Crypto - Wallets]
+ *     description: Add a new cryptocurrency wallet to track
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     requestBody:
@@ -127,14 +120,24 @@ router.get('/wallets', cryptoController.getUserWallets.bind(cryptoController));
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CreateWalletRequest'
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: "My MetaMask Wallet"
+ *               address:
+ *                 type: string
+ *                 example: "0x742d35cc6645c0532351bf5541ad8c1c7b6e90e2"
+ *               network:
+ *                 $ref: '#/components/schemas/BlockchainNetwork'
+ *             required: [name, address, network]
  *     responses:
  *       201:
  *         description: Wallet added successfully
  *         content:
  *           application/json:
  *             schema:
- *               type: object
+ *               $ref: '#/components/schemas/ApiResponse'
  *               properties:
  *                 success:
  *                   type: boolean
@@ -161,7 +164,7 @@ router.post(
  * /api/v1/crypto/wallets/{walletId}:
  *   get:
  *     summary: Get wallet details and portfolio
- *     tags: [Crypto - Wallets]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -203,7 +206,7 @@ router.get(
  * /api/v1/crypto/wallets/{walletId}:
  *   put:
  *     summary: Update wallet information
- *     tags: [Crypto - Wallets]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -236,7 +239,7 @@ router.put(
  * /api/v1/crypto/wallets/{walletId}:
  *   delete:
  *     summary: Remove a crypto wallet
- *     tags: [Crypto - Wallets]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -266,7 +269,7 @@ router.delete(
  * /api/v1/crypto/wallet:
  *   get:
  *     summary: Get wallet details and portfolio (flexible - by ID or address)
- *     tags: [Crypto - Wallets]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -305,7 +308,7 @@ router.get(
  * /api/v1/crypto/wallet/transactions:
  *   get:
  *     summary: Get wallet transactions (flexible - by ID or address)
- *     tags: [Crypto - Transactions]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -349,7 +352,7 @@ router.get(
  * /api/v1/crypto/wallet/nfts:
  *   get:
  *     summary: Get wallet NFTs (flexible - by ID or address)
- *     tags: [Crypto - NFTs]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -393,7 +396,7 @@ router.get(
  * /api/v1/crypto/wallet/defi:
  *   get:
  *     summary: Get wallet DeFi positions (flexible - by ID or address)
- *     tags: [Crypto - DeFi]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -441,7 +444,7 @@ router.get(
  * /api/v1/crypto/portfolio:
  *   get:
  *     summary: Get aggregated portfolio across all wallets
- *     tags: [Crypto - Portfolio]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -478,7 +481,7 @@ router.get('/portfolio', cryptoController.getAggregatedPortfolio.bind(cryptoCont
  * /api/v1/crypto/analytics:
  *   get:
  *     summary: Get portfolio analytics and performance metrics
- *     tags: [Crypto - Analytics]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -513,7 +516,7 @@ router.get(
  * /api/v1/crypto/transactions:
  *   get:
  *     summary: Get all transactions across wallets
- *     tags: [Crypto - Transactions]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -550,7 +553,7 @@ router.get('/transactions', cryptoController.getAllTransactions.bind(cryptoContr
  * /api/v1/crypto/wallets/{walletId}/transactions:
  *   get:
  *     summary: Get transactions for a specific wallet
- *     tags: [Crypto - Transactions]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -593,7 +596,7 @@ router.get(
  * /api/v1/crypto/nfts:
  *   get:
  *     summary: Get all NFTs across wallets
- *     tags: [Crypto - NFTs]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -629,7 +632,7 @@ router.get('/nfts', cryptoController.getAllNFTs.bind(cryptoController));
  * /api/v1/crypto/wallets/{walletId}/nfts:
  *   get:
  *     summary: Get NFTs for a specific wallet
- *     tags: [Crypto - NFTs]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -661,7 +664,7 @@ router.get(
  * /api/v1/crypto/defi:
  *   get:
  *     summary: Get all DeFi positions across wallets
- *     tags: [Crypto - DeFi]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -687,7 +690,7 @@ router.get('/defi', cryptoController.getAllDeFiPositions.bind(cryptoController))
  * /api/v1/crypto/wallets/{walletId}/defi:
  *   get:
  *     summary: Get DeFi positions for a specific wallet
- *     tags: [Crypto - DeFi]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -715,7 +718,7 @@ router.get(
  * /api/v1/crypto/wallets/{walletId}/sync:
  *   post:
  *     summary: Sync wallet data with blockchain
- *     tags: [Crypto - Sync]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -769,7 +772,7 @@ router.post(
  * /api/v1/crypto/wallets/{walletId}/sync/status:
  *   get:
  *     summary: Get wallet sync status
- *     tags: [Crypto - Sync]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -797,7 +800,7 @@ router.get('/wallets/:walletId/sync/status', cryptoController.getSyncStatus.bind
  * /api/v1/crypto/export:
  *   post:
  *     summary: Export portfolio data
- *     tags: [Crypto - Export]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     requestBody:
@@ -834,7 +837,7 @@ router.post(
  * @swagger
  * /api/v1/crypto/wallets/{walletId}/zapper:
  *   get:
- *     tags: [Zapper Integration]
+ *     tags: [Crypto]
  *     summary: Get wallet portfolio data from Zapper
  *     description: Retrieve comprehensive portfolio data for a wallet using Zapper's API
  *     parameters:
@@ -899,7 +902,7 @@ router.get(
  * @swagger
  * /api/crypto/zapper/farcaster:
  *   get:
- *     tags: [Zapper Integration]
+ *     tags: [Crypto]
  *     summary: Get Farcaster user portfolio via Zapper
  *     description: Retrieve portfolio data for Farcaster users by resolving their FID or username to addresses
  *     parameters:
@@ -955,7 +958,7 @@ router.get(
  * @swagger
  * /api/crypto/zapper/health:
  *   get:
- *     tags: [Zapper Integration]
+ *     tags: [Crypto]
  *     summary: Get service health status
  *     description: Check the health status of Zapper and other integrated services
  *     responses:
@@ -977,7 +980,7 @@ router.get(
  * /api/v1/crypto/wallet/portfolio/live:
  *   get:
  *     summary: Get live wallet portfolio data from external providers
- *     tags: [Crypto - Live Data]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -1026,7 +1029,7 @@ router.get(
  * /api/v1/crypto/wallet/transactions/live:
  *   get:
  *     summary: Get live wallet transactions from external providers
- *     tags: [Crypto - Live Data]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -1062,7 +1065,7 @@ router.get(
  * /api/v1/crypto/providers/status:
  *   get:
  *     summary: Get status of crypto data providers
- *     tags: [Crypto - System]
+ *     tags: [Crypto]
  *     security:
  *       - BearerAuth: []
  *     responses:

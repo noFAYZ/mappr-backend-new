@@ -4,7 +4,48 @@ import { toNodeHandler } from 'better-auth/node';
 
 const router = Router();
 
+/**
+ * Better Auth Integration
+ * 
+ * This router handles all Better Auth endpoints via a catch-all handler.
+ * Available authentication endpoints are documented in the Swagger configuration:
+ * - POST /api/auth/sign-up - Register new user
+ * - POST /api/auth/sign-in - Sign in user  
+ * - POST /api/auth/sign-out - Sign out user
+ * - POST /api/auth/forget-password - Request password reset
+ * - POST /api/auth/reset-password - Reset password with token
+ * - GET /api/auth/verify-email - Verify email with token
+ * - GET /api/auth/session - Get current session
+ * 
+ * See swagger.ts for detailed API documentation of these endpoints.
+ */
+
 // Health check endpoint specifically for auth (must come before catch-all)
+/**
+ * @swagger
+ * /api/auth/health:
+ *   get:
+ *     summary: Auth service health check
+ *     description: Check if the Better Auth service is running
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: Auth service is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 service:
+ *                   type: string
+ *                   example: better-auth
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 router.get('/api/auth/health', (_req, res) => {
   res.json({
     status: 'ok',

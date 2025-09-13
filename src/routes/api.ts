@@ -12,8 +12,23 @@ import { z } from 'zod';
 const router = Router();
 
 /**
- * Get current user session
- * Frontend can use this to check authentication status
+ * @swagger
+ * /api/v1/session:
+ *   get:
+ *     summary: Get current user session
+ *     description: Check authentication status and get current user session
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Session information retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/session', authenticate, async (req, res) => {
   try {
@@ -41,7 +56,32 @@ router.get('/session', authenticate, async (req, res) => {
 });
 
 /**
- * Get user profile (protected route)
+ * @swagger
+ * /api/v1/profile:
+ *   get:
+ *     summary: Get user profile
+ *     description: Retrieve the authenticated user's profile information
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/profile', requireAuth, async (req, res) => {
   try {
@@ -76,7 +116,45 @@ const updateProfileSchema = z.object({
 });
 
 /**
- * Update user profile (protected route)
+ * @swagger
+ * /api/v1/profile:
+ *   patch:
+ *     summary: Update user profile
+ *     description: Update the authenticated user's profile information
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 50
+ *                 example: "John"
+ *               lastName:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 50
+ *                 example: "Doe"
+ *               currency:
+ *                 type: string
+ *                 enum: [USD, EUR, GBP, CAD, AUD]
+ *                 example: "USD"
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.patch('/profile', requireAuth, async (req, res) => {
   try {
@@ -216,7 +294,29 @@ router.delete('/account', requireAuth, async (req, res) => {
 });
 
 /**
- * Get user statistics (protected route)
+ * @swagger
+ * /api/v1/stats:
+ *   get:
+ *     summary: Get user statistics
+ *     description: Retrieve aggregated statistics for the authenticated user
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User statistics retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/UserStats'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/stats', requireAuth, async (req, res) => {
   try {

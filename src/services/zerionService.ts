@@ -323,9 +323,9 @@ export class ZerionService {
           return (
             (await (this.sdk as any).wallets.getPositions?.(address, {
               filter: {
-                positions: 'only_simple' ,
-                trash:'only_non_trash',
-              }
+                positions: 'only_simple',
+                trash: 'only_non_trash',
+              },
             })) || { data: null }
           );
         },

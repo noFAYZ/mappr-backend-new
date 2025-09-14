@@ -122,7 +122,11 @@ const swaggerDefinition = {
           firstName: { type: 'string', example: 'John' },
           lastName: { type: 'string', example: 'Doe' },
           role: { type: 'string', enum: ['USER', 'ADMIN', 'PREMIUM'], example: 'USER' },
-          status: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION'], example: 'ACTIVE' },
+          status: {
+            type: 'string',
+            enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION'],
+            example: 'ACTIVE',
+          },
           emailVerified: { type: 'boolean', example: true },
           currency: { type: 'string', example: 'USD' },
           createdAt: { type: 'string', format: 'date-time' },
@@ -220,7 +224,17 @@ const swaggerDefinition = {
       },
       BlockchainNetwork: {
         type: 'string',
-        enum: ['ETHEREUM', 'POLYGON', 'BSC', 'AVALANCHE', 'ARBITRUM', 'OPTIMISM', 'BASE', 'FANTOM', 'SOLANA'],
+        enum: [
+          'ETHEREUM',
+          'POLYGON',
+          'BSC',
+          'AVALANCHE',
+          'ARBITRUM',
+          'OPTIMISM',
+          'BASE',
+          'FANTOM',
+          'SOLANA',
+        ],
         example: 'ETHEREUM',
       },
       TokenBalance: {
@@ -293,7 +307,7 @@ const swaggerDefinition = {
       PortfolioSummary: {
         type: 'object',
         properties: {
-          totalValue: { type: 'number', example: 15000.50 },
+          totalValue: { type: 'number', example: 15000.5 },
           totalAssets: { type: 'integer', example: 25 },
           dailyChange: {
             type: 'object',
@@ -352,16 +366,16 @@ const betterAuthPaths = {
         content: {
           'application/json': {
             schema: {
-              $ref: '#/components/schemas/RegisterRequest'
+              $ref: '#/components/schemas/RegisterRequest',
             },
             example: {
               email: 'user@example.com',
               password: 'SecurePassword123!',
               firstName: 'John',
-              lastName: 'Doe'
-            }
-          }
-        }
+              lastName: 'Doe',
+            },
+          },
+        },
       },
       responses: {
         201: {
@@ -369,16 +383,16 @@ const betterAuthPaths = {
           content: {
             'application/json': {
               schema: {
-                $ref: '#/components/schemas/AuthResponse'
-              }
-            }
-          }
+                $ref: '#/components/schemas/AuthResponse',
+              },
+            },
+          },
         },
         400: {
-          $ref: '#/components/responses/BadRequest'
-        }
-      }
-    }
+          $ref: '#/components/responses/BadRequest',
+        },
+      },
+    },
   },
   '/api/auth/sign-in': {
     post: {
@@ -390,14 +404,14 @@ const betterAuthPaths = {
         content: {
           'application/json': {
             schema: {
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: '#/components/schemas/LoginRequest',
             },
             example: {
               email: 'user@example.com',
-              password: 'SecurePassword123!'
-            }
-          }
-        }
+              password: 'SecurePassword123!',
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -405,16 +419,16 @@ const betterAuthPaths = {
           content: {
             'application/json': {
               schema: {
-                $ref: '#/components/schemas/AuthResponse'
-              }
-            }
-          }
+                $ref: '#/components/schemas/AuthResponse',
+              },
+            },
+          },
         },
         401: {
-          $ref: '#/components/responses/Unauthorized'
-        }
-      }
-    }
+          $ref: '#/components/responses/Unauthorized',
+        },
+      },
+    },
   },
   '/api/auth/sign-out': {
     post: {
@@ -428,13 +442,13 @@ const betterAuthPaths = {
           content: {
             'application/json': {
               schema: {
-                $ref: '#/components/schemas/ApiResponse'
-              }
-            }
-          }
-        }
-      }
-    }
+                $ref: '#/components/schemas/ApiResponse',
+              },
+            },
+          },
+        },
+      },
+    },
   },
   '/api/auth/forget-password': {
     post: {
@@ -451,13 +465,13 @@ const betterAuthPaths = {
                 email: {
                   type: 'string',
                   format: 'email',
-                  example: 'user@example.com'
-                }
+                  example: 'user@example.com',
+                },
               },
-              required: ['email']
-            }
-          }
-        }
+              required: ['email'],
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -465,16 +479,16 @@ const betterAuthPaths = {
           content: {
             'application/json': {
               schema: {
-                $ref: '#/components/schemas/ApiResponse'
-              }
-            }
-          }
+                $ref: '#/components/schemas/ApiResponse',
+              },
+            },
+          },
         },
         404: {
-          $ref: '#/components/responses/NotFound'
-        }
-      }
-    }
+          $ref: '#/components/responses/NotFound',
+        },
+      },
+    },
   },
   '/api/auth/reset-password': {
     post: {
@@ -490,18 +504,18 @@ const betterAuthPaths = {
               properties: {
                 token: {
                   type: 'string',
-                  example: 'reset-token-here'
+                  example: 'reset-token-here',
                 },
                 password: {
                   type: 'string',
                   minLength: 8,
-                  example: 'NewSecurePassword123!'
-                }
+                  example: 'NewSecurePassword123!',
+                },
               },
-              required: ['token', 'password']
-            }
-          }
-        }
+              required: ['token', 'password'],
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -509,16 +523,16 @@ const betterAuthPaths = {
           content: {
             'application/json': {
               schema: {
-                $ref: '#/components/schemas/ApiResponse'
-              }
-            }
-          }
+                $ref: '#/components/schemas/ApiResponse',
+              },
+            },
+          },
         },
         400: {
-          $ref: '#/components/responses/BadRequest'
-        }
-      }
-    }
+          $ref: '#/components/responses/BadRequest',
+        },
+      },
+    },
   },
   '/api/auth/verify-email': {
     get: {
@@ -531,10 +545,10 @@ const betterAuthPaths = {
           in: 'query',
           required: true,
           schema: {
-            type: 'string'
+            type: 'string',
           },
-          example: 'verification-token-here'
-        }
+          example: 'verification-token-here',
+        },
       ],
       responses: {
         200: {
@@ -542,16 +556,16 @@ const betterAuthPaths = {
           content: {
             'application/json': {
               schema: {
-                $ref: '#/components/schemas/ApiResponse'
-              }
-            }
-          }
+                $ref: '#/components/schemas/ApiResponse',
+              },
+            },
+          },
         },
         400: {
-          $ref: '#/components/responses/BadRequest'
-        }
-      }
-    }
+          $ref: '#/components/responses/BadRequest',
+        },
+      },
+    },
   },
   '/api/auth/session': {
     get: {
@@ -568,33 +582,33 @@ const betterAuthPaths = {
                 type: 'object',
                 properties: {
                   user: {
-                    $ref: '#/components/schemas/User'
+                    $ref: '#/components/schemas/User',
                   },
                   session: {
                     type: 'object',
                     properties: {
                       id: { type: 'string' },
                       userId: { type: 'string' },
-                      expiresAt: { type: 'string', format: 'date-time' }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      expiresAt: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         401: {
-          $ref: '#/components/responses/Unauthorized'
-        }
-      }
-    }
-  }
+          $ref: '#/components/responses/Unauthorized',
+        },
+      },
+    },
+  },
 };
 
 const options = {
-  definition: { 
+  definition: {
     ...swaggerDefinition,
-    paths: betterAuthPaths 
+    paths: betterAuthPaths,
   },
   apis: ['./src/routes/*.ts', './src/controllers/*.ts'], // Path to the API files
 };

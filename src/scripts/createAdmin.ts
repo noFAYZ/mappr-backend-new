@@ -102,7 +102,6 @@ async function createAdminUser() {
     console.log('🎉 You can now use this account to access the admin dashboard');
     console.log(`🌐 Admin Dashboard: /api/v1/admin/`);
     console.log(`📚 API Documentation: /docs\n`);
-
   } catch (error: any) {
     console.error('❌ Failed to create admin user:', error.message);
     logger.error('Admin creation script error:', error);

@@ -6,17 +6,17 @@ const router = Router();
 
 /**
  * Better Auth Integration
- * 
+ *
  * This router handles all Better Auth endpoints via a catch-all handler.
  * Available authentication endpoints are documented in the Swagger configuration:
  * - POST /api/auth/sign-up - Register new user
- * - POST /api/auth/sign-in - Sign in user  
+ * - POST /api/auth/sign-in - Sign in user
  * - POST /api/auth/sign-out - Sign out user
  * - POST /api/auth/forget-password - Request password reset
  * - POST /api/auth/reset-password - Reset password with token
  * - GET /api/auth/verify-email - Verify email with token
  * - GET /api/auth/session - Get current session
- * 
+ *
  * See swagger.ts for detailed API documentation of these endpoints.
  */
 

@@ -5,7 +5,12 @@ export class AdminHelpers {
   /**
    * Create a system admin user (for initial setup)
    */
-  static async createSystemAdmin(email: string, _password: string, firstName: string, lastName: string) {
+  static async createSystemAdmin(
+    email: string,
+    _password: string,
+    firstName: string,
+    lastName: string
+  ) {
     try {
       const admin = await prisma.user.create({
         data: {
@@ -47,34 +52,29 @@ export class AdminHelpers {
    */
   static async getPlatformStats() {
     try {
-      const [
-        userStats,
-        subscriptionStats,
-        revenueStats,
-        cryptoStats,
-        transactionStats,
-      ] = await Promise.all([
-        prisma.user.groupBy({
-          by: ['status', 'currentPlan'],
-          _count: true,
-        }),
-        
-        prisma.subscription.groupBy({
-          by: ['status'],
-          _count: true,
-          _sum: { amount: true },
-        }),
-        
-        prisma.payment.aggregate({
-          where: { status: 'SUCCEEDED' },
-          _sum: { amount: true },
-          _count: true,
-        }),
-        
-        prisma.cryptoWallet.count(),
-        
-        prisma.transaction.count(),
-      ]);
+      const [userStats, subscriptionStats, revenueStats, cryptoStats, transactionStats] =
+        await Promise.all([
+          prisma.user.groupBy({
+            by: ['status', 'currentPlan'],
+            _count: true,
+          }),
+
+          prisma.subscription.groupBy({
+            by: ['status'],
+            _count: true,
+            _sum: { amount: true },
+          }),
+
+          prisma.payment.aggregate({
+            where: { status: 'SUCCEEDED' },
+            _sum: { amount: true },
+            _count: true,
+          }),
+
+          prisma.cryptoWallet.count(),
+
+          prisma.transaction.count(),
+        ]);
 
       return {
         users: userStats,
@@ -94,13 +94,7 @@ export class AdminHelpers {
    */
   static async generateReport(startDate: Date, endDate: Date) {
     try {
-      const [
-        newUsers,
-        newSubscriptions,
-        revenue,
-        topUsers,
-        errorCount,
-      ] = await Promise.all([
+      const [newUsers, newSubscriptions, revenue, topUsers, errorCount] = await Promise.all([
         prisma.user.count({
           where: {
             createdAt: {
@@ -109,7 +103,7 @@ export class AdminHelpers {
             },
           },
         }),
-        
+
         prisma.subscription.count({
           where: {
             createdAt: {
@@ -118,7 +112,7 @@ export class AdminHelpers {
             },
           },
         }),
-        
+
         prisma.payment.aggregate({
           where: {
             status: 'SUCCEEDED',
@@ -130,7 +124,7 @@ export class AdminHelpers {
           _sum: { amount: true },
           _count: true,
         }),
-        
+
         prisma.$queryRaw`
           SELECT 
             u.email,
@@ -144,7 +138,7 @@ export class AdminHelpers {
           ORDER BY usage_count DESC
           LIMIT 10
         `,
-        
+
         prisma.auditLog.count({
           where: {
             action: { contains: 'ERROR' },

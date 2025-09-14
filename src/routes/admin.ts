@@ -90,7 +90,10 @@ router.use(requireAdmin);
  *       403:
  *         description: Admin access required
  */
-router.get('/dashboard/stats', asyncHandler(adminController.getDashboardStats.bind(adminController)));
+router.get(
+  '/dashboard/stats',
+  asyncHandler(adminController.getDashboardStats.bind(adminController))
+);
 
 /**
  * @swagger
@@ -111,7 +114,10 @@ router.get('/dashboard/stats', asyncHandler(adminController.getDashboardStats.bi
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.get('/analytics/users', asyncHandler(adminController.getUserAnalytics.bind(adminController)));
+router.get(
+  '/analytics/users',
+  asyncHandler(adminController.getUserAnalytics.bind(adminController))
+);
 
 /**
  * @swagger
@@ -132,7 +138,10 @@ router.get('/analytics/users', asyncHandler(adminController.getUserAnalytics.bin
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.get('/analytics/revenue', asyncHandler(adminController.getRevenueAnalytics.bind(adminController)));
+router.get(
+  '/analytics/revenue',
+  asyncHandler(adminController.getRevenueAnalytics.bind(adminController))
+);
 
 /**
  * @swagger
@@ -469,7 +478,10 @@ router.get('/system/alerts', asyncHandler(adminController.getSystemAlerts.bind(a
  *       403:
  *         description: Insufficient permissions for maintenance operations
  */
-router.post('/system/maintenance', asyncHandler(adminController.performMaintenance.bind(adminController)));
+router.post(
+  '/system/maintenance',
+  asyncHandler(adminController.performMaintenance.bind(adminController))
+);
 
 /**
  * @swagger

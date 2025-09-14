@@ -25,7 +25,7 @@ export class AdminController {
       ] = await Promise.all([
         // Total users
         prisma.user.count(),
-        
+
         // Active users (logged in within last 30 days)
         prisma.user.count({
           where: {
@@ -34,22 +34,22 @@ export class AdminController {
             },
           },
         }),
-        
+
         // Total subscriptions
         prisma.subscription.count(),
-        
+
         // Total revenue from successful payments
         prisma.payment.aggregate({
           where: { status: 'SUCCEEDED' },
           _sum: { amount: true },
         }),
-        
+
         // Total crypto wallets
         prisma.cryptoWallet.count(),
-        
+
         // Total transactions
         prisma.transaction.count(),
-        
+
         // New users this month
         prisma.user.count({
           where: {
@@ -58,7 +58,7 @@ export class AdminController {
             },
           },
         }),
-        
+
         // Active subscriptions
         prisma.subscription.count({
           where: { status: 'ACTIVE' },
@@ -238,7 +238,7 @@ export class AdminController {
             },
           },
         }),
-        
+
         prisma.auditLog.count({
           where: {
             action: {
@@ -286,7 +286,7 @@ export class AdminController {
   async getUsers(req: Request, res: Response) {
     try {
       assertAuthenticatedUser(req);
-      
+
       const page = Math.max(1, parseInt(req.query['page'] as string) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query['limit'] as string) || 10));
       const offset = (page - 1) * limit;
@@ -438,9 +438,9 @@ export class AdminController {
     try {
       assertAuthenticatedUser(req);
 
-      const timeRange = req.query['timeRange'] as string || '7d';
+      const timeRange = (req.query['timeRange'] as string) || '7d';
       const days = timeRange === '1d' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 7;
-      
+
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
       // Feature usage breakdown
@@ -562,9 +562,11 @@ export class AdminController {
   async generateReport(req: Request, res: Response) {
     try {
       assertAuthenticatedUser(req);
-      
+
       const { startDate, endDate } = req.query;
-      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const start = startDate
+        ? new Date(startDate as string)
+        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const end = endDate ? new Date(endDate as string) : new Date();
 
       const report = await adminHelpers.generateReport(start, end);
@@ -589,7 +591,7 @@ export class AdminController {
   async getSystemAlerts(req: Request, res: Response) {
     try {
       assertAuthenticatedUser(req);
-      
+
       const alerts = await adminHelpers.getSystemAlerts();
 
       res.json({
@@ -612,9 +614,9 @@ export class AdminController {
   async performMaintenance(req: Request, res: Response) {
     try {
       const admin = assertAuthenticatedUser(req);
-      
+
       await adminHelpers.validateAdminPermissions(admin.id, 'SYSTEM_MAINTENANCE');
-      
+
       const results = await adminHelpers.performMaintenance();
 
       res.json({
@@ -638,7 +640,7 @@ export class AdminController {
   async getPlatformStats(req: Request, res: Response) {
     try {
       assertAuthenticatedUser(req);
-      
+
       const stats = await adminHelpers.getPlatformStats();
 
       res.json({

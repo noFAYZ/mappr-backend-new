@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { cryptoService } from '@/services/cryptoService';
+import { userSyncProgressManager } from '@/services/userSyncProgressManager';
 import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import {
@@ -976,7 +977,6 @@ export class CryptoController {
       logger.info(`Zapper wallet data retrieved for user ${userId}`, {
         userId,
         walletId,
-     
       });
 
       res.json({
@@ -988,7 +988,6 @@ export class CryptoController {
       this.handleError(error, res);
     }
   }
-
 
   async getZapperFarcasterData(req: Request, res: Response) {
     try {
@@ -1066,13 +1065,13 @@ export class CryptoController {
       if (!userId) {
         throw new AppError('User authentication required', 401);
       }
-      
+
       // Validate query parameters - accepts both walletId and address
       const parsed = GetWalletDetailsFlexibleRequestSchema.parse({ query: req.query });
       const { walletId, address } = parsed.query;
-      
+
       let walletAddress: string;
-      
+
       if (address) {
         walletAddress = address;
       } else if (walletId) {
@@ -1082,23 +1081,23 @@ export class CryptoController {
       } else {
         throw new AppError('Either walletId or address must be provided', 400);
       }
-      
+
       // Get live data from external providers using unified method
       const livePortfolio = await cryptoService.getUnifiedWalletPortfolio(walletAddress);
-      
+
       logger.info(`Live wallet portfolio fetched for user ${userId}`, {
         userId,
         walletAddress,
-        provider: livePortfolio.provider
+        provider: livePortfolio.provider,
       });
-      
+
       res.json({
         success: true,
         data: livePortfolio.data,
         meta: {
           provider: livePortfolio.provider,
           live: true,
-          address: walletAddress
+          address: walletAddress,
         },
         message: 'Live wallet portfolio retrieved successfully',
       });
@@ -1113,13 +1112,13 @@ export class CryptoController {
       if (!userId) {
         throw new AppError('User authentication required', 401);
       }
-      
+
       // Validate query parameters
       const parsed = GetWalletTransactionsFlexibleRequestSchema.parse({ query: req.query });
       const { walletId, address, limit = 20 } = parsed.query;
-      
+
       let walletAddress: string;
-      
+
       if (address) {
         walletAddress = address;
       } else if (walletId) {
@@ -1129,24 +1128,27 @@ export class CryptoController {
       } else {
         throw new AppError('Either walletId or address must be provided', 400);
       }
-      
+
       // Get live transaction data from external providers
-      const liveTransactions = await cryptoService.getUnifiedWalletTransactions(walletAddress, limit);
-      
+      const liveTransactions = await cryptoService.getUnifiedWalletTransactions(
+        walletAddress,
+        limit
+      );
+
       logger.info(`Live wallet transactions fetched for user ${userId}`, {
         userId,
         walletAddress,
         provider: liveTransactions.provider,
-        limit
+        limit,
       });
-      
+
       res.json({
         success: true,
         data: liveTransactions.data,
         meta: {
           provider: liveTransactions.provider,
           live: true,
-          address: walletAddress
+          address: walletAddress,
         },
         message: 'Live wallet transactions retrieved successfully',
       });
@@ -1161,13 +1163,158 @@ export class CryptoController {
       if (!userId) {
         throw new AppError('User authentication required', 401);
       }
-      
+
       const providerStatus = await cryptoService.getProviderStatus();
-      
+
       res.json({
         success: true,
         data: providerStatus,
         message: 'Provider status retrieved successfully',
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  // ===============================
+  // REAL-TIME SYNC PROGRESS TRACKING
+  // ===============================
+
+  async streamUserSyncProgress(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Get user's wallets to track
+      const wallets = await cryptoService.getUserWallets(userId);
+      const walletIds = wallets.map(wallet => wallet.id);
+
+      // Setup SSE connection for this user
+      const connected = userSyncProgressManager.addUserConnection(userId, res, walletIds);
+
+      if (!connected) {
+        throw new AppError('Failed to establish SSE connection', 500);
+      }
+
+      logger.info(`SSE connection established for user ${userId} with ${walletIds.length} wallets`);
+
+      // Connection will be managed by userSyncProgressManager
+      // Response will be kept alive until client disconnects
+    } catch (error) {
+      logger.error('Error establishing SSE connection:', error);
+      if (!res.headersSent) {
+        this.handleError(error, res);
+      }
+    }
+  }
+
+  async getBatchSyncStatus(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Get user's wallets
+      const wallets = await cryptoService.getUserWallets(userId);
+
+      if (!wallets || wallets.length === 0) {
+        res.json({
+          success: true,
+          data: { wallets: {} },
+          message: 'No wallets found'
+        });
+        return;
+      }
+
+      // Build batch status response
+      const walletStatuses: Record<string, any> = {};
+
+      for (const wallet of wallets) {
+        try {
+          // Get individual wallet sync status (if exists)
+          const syncStatus = await this.getWalletSyncStatusInternal(wallet.id);
+
+          walletStatuses[wallet.id] = {
+            id: wallet.id,
+            name: wallet.name,
+            address: wallet.address,
+            network: wallet.network,
+            syncStatus: syncStatus || {
+              status: 'completed',
+              progress: 100,
+              lastSyncAt: wallet.updatedAt,
+              syncedData: ['assets']
+            }
+          };
+        } catch (error) {
+          logger.warn(`Failed to get sync status for wallet ${wallet.id}:`, error);
+          walletStatuses[wallet.id] = {
+            id: wallet.id,
+            name: wallet.name,
+            address: wallet.address,
+            network: wallet.network,
+            syncStatus: {
+              status: 'error',
+              progress: 0,
+              error: 'Failed to get sync status'
+            }
+          };
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          wallets: walletStatuses,
+          totalWallets: wallets.length,
+          syncingCount: Object.values(walletStatuses).filter(w =>
+            w.syncStatus.status === 'syncing' || w.syncStatus.status === 'queued'
+          ).length
+        },
+        message: 'Batch sync status retrieved successfully'
+      });
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  // Internal method to get wallet sync status (used by batch endpoint)
+  private async getWalletSyncStatusInternal(walletId: string) {
+    try {
+      // Try to get job status from crypto service
+      const jobStatus = await cryptoService.getJobStatus(`wallet_${walletId}`);
+      return jobStatus;
+    } catch (error) {
+      // If no active job, return null to use wallet data
+      return null;
+    }
+  }
+
+  async getSyncProgressStats(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Get connection stats from progress manager
+      const stats = userSyncProgressManager.getStats();
+      const userConnection = stats.connections.find(conn => conn.userId === userId);
+
+      res.json({
+        success: true,
+        data: {
+          isConnected: !!userConnection,
+          connectionInfo: userConnection || null,
+          systemStats: {
+            totalConnections: stats.totalConnections,
+            isHealthy: userSyncProgressManager.isHealthy()
+          }
+        },
+        message: 'Sync progress stats retrieved successfully'
       });
     } catch (error) {
       this.handleError(error, res);

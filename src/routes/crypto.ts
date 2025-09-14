@@ -897,7 +897,6 @@ router.get(
   cryptoController.getZapperWalletData.bind(cryptoController)
 );
 
-
 /**
  * @swagger
  * /api/crypto/zapper/farcaster:
@@ -1104,6 +1103,163 @@ router.get(
   '/providers/status',
   authenticate,
   asyncHandler(cryptoController.getProviderStatus.bind(cryptoController))
+);
+
+// ===============================
+// REAL-TIME SYNC PROGRESS ROUTES
+// ===============================
+
+/**
+ * @swagger
+ * /api/v1/crypto/user/sync/stream:
+ *   get:
+ *     summary: Stream real-time sync progress for all user wallets via SSE
+ *     description: Establishes a Server-Sent Events connection to receive real-time updates for all wallet sync operations
+ *     tags: [Crypto]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: SSE connection established successfully
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ *               example: |
+ *                 data: {"type":"connection_established","userId":"user123","timestamp":"2023-01-01T00:00:00.000Z"}
+ *
+ *                 data: {"type":"wallet_sync_progress","walletId":"wallet123","progress":25,"status":"syncing_assets","timestamp":"2023-01-01T00:00:01.000Z"}
+ *
+ *                 data: {"type":"wallet_sync_completed","walletId":"wallet123","progress":100,"status":"completed","syncedData":["assets","transactions"],"timestamp":"2023-01-01T00:00:02.000Z"}
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.get(
+  '/user/sync/stream',
+  authenticate,
+  cryptoController.streamUserSyncProgress.bind(cryptoController)
+);
+
+/**
+ * @swagger
+ * /api/v1/crypto/user/wallets/sync/status:
+ *   get:
+ *     summary: Get batch sync status for all user wallets
+ *     description: Returns the current sync status for all wallets belonging to the authenticated user
+ *     tags: [Crypto]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Batch sync status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     wallets:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           address:
+ *                             type: string
+ *                           network:
+ *                             type: string
+ *                           syncStatus:
+ *                             type: object
+ *                             properties:
+ *                               status:
+ *                                 type: string
+ *                                 enum: [queued, syncing, syncing_assets, syncing_transactions, syncing_nfts, syncing_defi, completed, failed]
+ *                               progress:
+ *                                 type: number
+ *                                 minimum: 0
+ *                                 maximum: 100
+ *                               lastSyncAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                               syncedData:
+ *                                 type: array
+ *                                 items:
+ *                                   type: string
+ *                               error:
+ *                                 type: string
+ *                     totalWallets:
+ *                       type: number
+ *                     syncingCount:
+ *                       type: number
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.get(
+  '/user/wallets/sync/status',
+  authenticate,
+  cryptoController.getBatchSyncStatus.bind(cryptoController)
+);
+
+/**
+ * @swagger
+ * /api/v1/crypto/user/sync/stats:
+ *   get:
+ *     summary: Get sync progress connection statistics
+ *     description: Returns information about the user's SSE connection and system-wide sync progress stats
+ *     tags: [Crypto]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sync progress stats retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     isConnected:
+ *                       type: boolean
+ *                     connectionInfo:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         userId:
+ *                           type: string
+ *                         connectedAt:
+ *                           type: string
+ *                           format: date-time
+ *                         walletCount:
+ *                           type: number
+ *                         wallets:
+ *                           type: array
+ *                           items:
+ *                             type: string
+ *                     systemStats:
+ *                       type: object
+ *                       properties:
+ *                         totalConnections:
+ *                           type: number
+ *                         isHealthy:
+ *                           type: boolean
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.get(
+  '/user/sync/stats',
+  authenticate,
+  cryptoController.getSyncProgressStats.bind(cryptoController)
 );
 
 export { router as cryptoRoutes };

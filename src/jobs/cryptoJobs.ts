@@ -3,6 +3,8 @@ import { prisma } from '@/config/database';
 import { logger } from '@/utils/logger';
 import { createZerionService, ZerionService } from '@/services/zerionService';
 import { AssetCacheService } from '@/services/assetCacheService';
+import { cryptoService } from '@/services/cryptoService';
+import { userSyncProgressManager } from '@/services/userSyncProgressManager';
 import { QUEUE_NAMES, JOB_TYPES, queueManager } from '@/config/queue';
 import {
   SyncWalletJobData,
@@ -186,6 +188,15 @@ export class CryptoJobProcessor {
         activeJobsCount: this.activeJobs.size,
       });
 
+      // Publish sync started event
+      await userSyncProgressManager.publishProgress(userId, walletId, {
+        walletId,
+        progress: 0,
+        status: 'queued',
+        message: 'Sync job queued',
+        startedAt: new Date()
+      });
+
       // Enhanced input validation
       await this.validateJobInputs({ userId, walletId, fullSync }, 'SYNC_WALLET');
 
@@ -195,6 +206,15 @@ export class CryptoJobProcessor {
         'getWallet'
       );
       await job.updateProgress(10);
+
+      // Publish sync started event with wallet info
+      await userSyncProgressManager.publishProgress(userId, walletId, {
+        walletId,
+        progress: 10,
+        status: 'syncing',
+        message: `Starting sync for ${wallet.name} (${wallet.address.substring(0, 10)}...)`,
+        startedAt: new Date()
+      });
 
       if (!this.zerionService) {
         throw new CryptoServiceError(
@@ -220,17 +240,41 @@ export class CryptoJobProcessor {
       );
       await job.updateProgress(15);
 
+      // Publish syncing assets progress
+      await userSyncProgressManager.publishProgress(userId, walletId, {
+        walletId,
+        progress: 15,
+        status: 'syncing_assets',
+        message: 'Fetching portfolio assets...',
+      });
+
       // Sync basic portfolio data
       let portfolioData;
       try {
         portfolioData = await this.zerionService.getWalletPortfolio(wallet.address);
         await job.updateProgress(35);
+
+        // Publish assets fetched
+        await userSyncProgressManager.publishProgress(userId, walletId, {
+          walletId,
+          progress: 35,
+          status: 'syncing_assets',
+          message: 'Processing portfolio data...',
+        });
       } catch (error) {
         logger.warn('Portfolio sync failed, continuing with limited data', {
           ...context,
           error: error instanceof Error ? error.message : String(error),
         });
         portfolioData = null;
+
+        // Publish error but continue
+        await userSyncProgressManager.publishProgress(userId, walletId, {
+          walletId,
+          progress: 35,
+          status: 'syncing_assets',
+          message: 'Portfolio sync failed, using cached data...',
+        });
       }
 
       // Process and save portfolio data with transaction safety
@@ -248,9 +292,25 @@ export class CryptoJobProcessor {
       let syncedDataTypes = ['portfolio'];
 
       if (fullSync) {
+        // Publish transaction sync start
+        await userSyncProgressManager.publishProgress(userId, walletId, {
+          walletId,
+          progress: 60,
+          status: 'syncing_transactions',
+          message: 'Fetching transaction history...',
+        });
+
         // Sync transactions with better error handling
         try {
           const transactionData = await this.zerionService.getWalletTransactions(wallet.address);
+
+          await userSyncProgressManager.publishProgress(userId, walletId, {
+            walletId,
+            progress: 75,
+            status: 'syncing_transactions',
+            message: 'Processing transaction data...',
+          });
+
           await this.executeWithTransaction(
             async (tx) =>
               await this.processTransactionData(wallet.id, transactionData, context, tx),
@@ -286,6 +346,14 @@ export class CryptoJobProcessor {
         }
       }
 
+      // Publish final progress
+      await userSyncProgressManager.publishProgress(userId, walletId, {
+        walletId,
+        progress: 95,
+        status: 'syncing',
+        message: 'Finalizing sync...',
+      });
+
       // Update wallet sync timestamp with transaction safety
       await this.executeWithTransaction(
         async (tx) => await this.updateWalletStatus(walletId, 'COMPLETED', context, tx),
@@ -314,6 +382,17 @@ export class CryptoJobProcessor {
 
       this.recordJobSuccess(context, result);
       logger.info('Wallet sync job completed successfully', { ...context, result });
+
+      // Publish successful completion
+      await userSyncProgressManager.publishCompleted(userId, walletId, {
+        ...result,
+        status: 'completed',
+        progress: 100,
+        completedAt: new Date(),
+        syncedData: syncedDataTypes,
+        processingTimeMs: result.processingTime
+      });
+
       return result;
     } catch (jobError) {
       const errorDetails = this.extractErrorDetails(jobError);
@@ -329,6 +408,15 @@ export class CryptoJobProcessor {
         async (tx) => await this.updateWalletStatus(walletId, 'FAILED', context, tx),
         'failWalletSync'
       ).catch((e) => logger.error('Failed to update wallet sync status', { ...context, error: e }));
+
+      // Publish failure event
+      await userSyncProgressManager.publishFailed(userId, walletId, {
+        status: 'failed',
+        progress: 0,
+        error: (errorDetails as any).message || 'Unknown sync error',
+        failedAt: new Date(),
+        processingTimeMs: Date.now() - context.startTime
+      });
 
       this.recordJobFailure(context, jobError);
 
@@ -367,7 +455,9 @@ export class CryptoJobProcessor {
 
     // Handle syncTypes array format
     const shouldSyncAssets = syncTypes ? syncTypes.includes('assets') : syncAssets;
-    const shouldSyncTransactions = syncTypes ? syncTypes.includes('transactions') : syncTransactions;
+    const shouldSyncTransactions = syncTypes
+      ? syncTypes.includes('transactions')
+      : syncTransactions;
     const shouldSyncNFTs = syncTypes ? syncTypes.includes('nfts') : syncNFTs;
     const shouldSyncDeFi = syncTypes ? syncTypes.includes('defi') : syncDeFi;
 
@@ -530,13 +620,13 @@ export class CryptoJobProcessor {
           const nfts = await trackApiCall('getWalletNFTs', () =>
             this.zapperService!.getWalletNFTs([wallet.address])
           );
-          
+
           const nftCount = nfts?.portfolioV2?.nftBalances?.totalTokensOwned || 0;
           console.log(`🖼️ Processing ${nftCount} NFTs`);
-          
+
           // Process NFTs according to crypto_nfts schema
           await this.processZapperNFTs(wallet.id, nfts);
-          
+
           results.syncedData.push('nfts');
           results.nftsSyncType = 'zapper';
           results.nftsFetched = nftCount;
@@ -946,7 +1036,9 @@ export class CryptoJobProcessor {
     }
 
     // Handle ZerionPositionsResponse structure
-    const positions = (positionsData.data || positionsData)?.filter((pos: any) => pos?.attributes?.price > 0);
+    const positions = (positionsData.data || positionsData)?.filter(
+      (pos: any) => pos?.attributes?.price > 0
+    );
 
     if (!Array.isArray(positions)) {
       logger.warn('Invalid positions data structure - expected array', {
@@ -988,7 +1080,6 @@ export class CryptoJobProcessor {
     console.log(`🔍 Parsing ${positions.length} positions for assets`);
     for (const position of positions) {
       try {
-       
         if (position.type !== 'positions') {
           skippedCount++;
           continue;
@@ -1032,7 +1123,6 @@ export class CryptoJobProcessor {
           balanceUsd: attributes.value || 0,
           dayChange: attributes?.changes?.absolute_1d || 0,
           dayChangePct: attributes?.changes?.percent_1d || 0,
-
         };
 
         const additionalMetadata = {
@@ -1493,7 +1583,7 @@ export class CryptoJobProcessor {
     // Implementation would go here based on actual P&L data structure
   }
 
-private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
+  private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
     if (!nfts?.portfolioV2?.nftBalances?.byToken?.edges) {
       logger.warn('No NFT data to process', { walletId });
       return;
@@ -1513,7 +1603,7 @@ private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
       try {
         const token = edge?.node?.token;
         const collection = token?.collection;
-        
+
         if (!token || !collection) {
           skippedCount++;
           continue;
@@ -1538,14 +1628,16 @@ private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
         const category = this.mapZapperNFTTypeToCategory(nftType);
 
         // Extract image URL from mediasV3
-        const imageUrl = token.mediasV3?.images?.edges?.[0]?.node?.medium ||
-                        token.mediasV3?.images?.edges?.[0]?.node?.large ||
-                        null;
+        const imageUrl =
+          token.mediasV3?.images?.edges?.[0]?.node?.medium ||
+          token.mediasV3?.images?.edges?.[0]?.node?.large ||
+          null;
 
         // Extract animation URL if available
-        const animationUrl = token.mediasV3?.videos?.edges?.[0]?.node?.medium ||
-                           token.mediasV3?.videos?.edges?.[0]?.node?.large ||
-                           null;
+        const animationUrl =
+          token.mediasV3?.videos?.edges?.[0]?.node?.medium ||
+          token.mediasV3?.videos?.edges?.[0]?.node?.large ||
+          null;
 
         // Extract attributes
         const attributes = token.attributes ? JSON.parse(JSON.stringify(token.attributes)) : null;
@@ -1618,7 +1710,6 @@ private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
           estimatedValue,
           isSpam: nftData.isSpam,
         });
-
       } catch (error) {
         errorCount++;
         logger.warn('Error processing NFT', {
@@ -1809,6 +1900,24 @@ private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
         data: updateData,
       });
 
+      // Clear cache when sync is completed to ensure fresh data on next request
+      if (status === 'COMPLETED') {
+        try {
+          await cryptoService.clearWalletCache(walletId);
+          await cryptoService.clearUserCache(context.userId);
+          logger.info('Cache cleared after successful sync', {
+            ...context,
+            walletId: walletId.substring(0, 8) + '...',
+          });
+        } catch (cacheError) {
+          logger.warn('Failed to clear cache after sync completion', {
+            ...context,
+            walletId: walletId.substring(0, 8) + '...',
+            error: cacheError instanceof Error ? cacheError.message : String(cacheError),
+          });
+        }
+      }
+
       logger.debug('Successfully updated wallet status', {
         ...context,
         walletId: walletId.substring(0, 8) + '...',
@@ -1836,7 +1945,6 @@ private async processZapperNFTs(walletId: string, nfts: any): Promise<void> {
   ): Promise<void> {
     try {
       const prismaClient = tx || prisma;
-
 
       logger.debug('Upserting position', {
         walletId: walletId.substring(0, 8) + '...',

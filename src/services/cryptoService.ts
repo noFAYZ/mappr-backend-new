@@ -32,8 +32,10 @@ export class CryptoService {
 
   constructor() {
     // Set provider preferences from environment
-    this.primaryProvider = (process.env['CRYPTO_PRIMARY_PROVIDER'] as 'zapper' | 'zerion') || 'zapper';
-    this.fallbackProvider = (process.env['CRYPTO_FALLBACK_PROVIDER'] as 'zapper' | 'zerion') || 'zerion';
+    this.primaryProvider =
+      (process.env['CRYPTO_PRIMARY_PROVIDER'] as 'zapper' | 'zerion') || 'zapper';
+    this.fallbackProvider =
+      (process.env['CRYPTO_FALLBACK_PROVIDER'] as 'zapper' | 'zerion') || 'zerion';
     // Initialize Zerion SDK
     const zerionApiKey = process.env['ZERION_API_KEY'];
     if (!zerionApiKey) {
@@ -142,6 +144,10 @@ export class CryptoService {
 
       // Initialize wallet sync in background
       await this.scheduleWalletSync(userId, wallet.id, true);
+
+      // Clear cache to ensure fresh data
+      await this.clearWalletCache(wallet.id);
+      await this.clearUserCache(userId);
 
       logger.info(
         `Crypto wallet added for user ${userId}: ${walletData.address} on ${walletData.network}`
@@ -293,7 +299,7 @@ export class CryptoService {
   // ===============================
 
   private async getWalletDataFromProvider(
-    address: string, 
+    address: string,
     provider: 'zapper' | 'zerion'
   ): Promise<any> {
     try {
@@ -302,18 +308,18 @@ export class CryptoService {
         const [assets, nfts, transactions] = await Promise.all([
           this.zapperService.getWalletAssets([address]),
           this.zapperService.getWalletNFTs([address]),
-          this.zapperService.getWalletTransactions([address], 20)
+          this.zapperService.getWalletTransactions([address], 20),
         ]);
-        
+
         return {
           provider: 'zapper',
-          data: { assets, nfts, transactions }
+          data: { assets, nfts, transactions },
         };
       } else if (provider === 'zerion' && this.zerionService) {
         const portfolioData = await this.zerionService.getWalletPortfolio(address);
         return {
-          provider: 'zerion', 
-          data: portfolioData
+          provider: 'zerion',
+          data: portfolioData,
         };
       } else {
         throw new Error(`Provider ${provider} not available`);
@@ -329,15 +335,22 @@ export class CryptoService {
       // Try primary provider first
       try {
         const result = await this.getWalletDataFromProvider(address, this.primaryProvider);
-        logger.info(`Successfully fetched wallet portfolio from primary provider (${this.primaryProvider})`);
+        logger.info(
+          `Successfully fetched wallet portfolio from primary provider (${this.primaryProvider})`
+        );
         return result;
       } catch (primaryError) {
-        logger.warn(`Primary provider (${this.primaryProvider}) failed, trying fallback:`, primaryError);
-        
+        logger.warn(
+          `Primary provider (${this.primaryProvider}) failed, trying fallback:`,
+          primaryError
+        );
+
         // Try fallback provider
         if (this.fallbackProvider !== this.primaryProvider) {
           const result = await this.getWalletDataFromProvider(address, this.fallbackProvider);
-          logger.info(`Successfully fetched wallet portfolio from fallback provider (${this.fallbackProvider})`);
+          logger.info(
+            `Successfully fetched wallet portfolio from fallback provider (${this.fallbackProvider})`
+          );
           return result;
         } else {
           throw primaryError;
@@ -367,12 +380,17 @@ export class CryptoService {
         } else {
           throw new Error(`Primary provider ${this.primaryProvider} not available`);
         }
-        
-        logger.info(`Successfully fetched wallet transactions from primary provider (${this.primaryProvider})`);
+
+        logger.info(
+          `Successfully fetched wallet transactions from primary provider (${this.primaryProvider})`
+        );
         return result;
       } catch (primaryError) {
-        logger.warn(`Primary provider (${this.primaryProvider}) failed for transactions, trying fallback:`, primaryError);
-        
+        logger.warn(
+          `Primary provider (${this.primaryProvider}) failed for transactions, trying fallback:`,
+          primaryError
+        );
+
         // Try fallback provider
         if (this.fallbackProvider !== this.primaryProvider) {
           let result;
@@ -385,8 +403,10 @@ export class CryptoService {
           } else {
             throw new Error(`Fallback provider ${this.fallbackProvider} not available`);
           }
-          
-          logger.info(`Successfully fetched wallet transactions from fallback provider (${this.fallbackProvider})`);
+
+          logger.info(
+            `Successfully fetched wallet transactions from fallback provider (${this.fallbackProvider})`
+          );
           return result;
         } else {
           throw primaryError;
@@ -409,7 +429,7 @@ export class CryptoService {
     const checkProvider = async (provider: 'zapper' | 'zerion') => {
       let available = false;
       let healthy = false;
-      
+
       try {
         if (provider === 'zapper' && this.zapperService) {
           available = true;
@@ -423,13 +443,13 @@ export class CryptoService {
       } catch (error) {
         logger.warn(`Health check failed for ${provider}:`, error);
       }
-      
+
       return { provider, available, healthy };
     };
 
     const [primary, fallback] = await Promise.all([
       checkProvider(this.primaryProvider),
-      checkProvider(this.fallbackProvider)
+      checkProvider(this.fallbackProvider),
     ]);
 
     return { primary, fallback };
@@ -443,8 +463,29 @@ export class CryptoService {
     try {
       const cacheKey = `${CacheKeys.WALLET_PORTFOLIO}:${walletId}`;
       let cached = null;
+      let useCache = true;
 
-      if (this.redis) {
+      // Check if wallet was recently added (within last 10 minutes) - skip cache for fresh wallets
+      const wallet = await prisma.cryptoWallet.findFirst({
+        where: { id: walletId, userId },
+        select: { createdAt: true, syncStatus: true },
+      });
+
+      if (wallet) {
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const isRecentlyAdded = wallet.createdAt > tenMinutesAgo;
+        const isSyncing = wallet.syncStatus === 'IN_PROGRESS';
+
+        // Skip cache if wallet is recently added or currently syncing
+        if (isRecentlyAdded || isSyncing) {
+          useCache = false;
+          logger.info(
+            `Skipping cache for wallet ${walletId} - recently added: ${isRecentlyAdded}, syncing: ${isSyncing}`
+          );
+        }
+      }
+
+      if (useCache && this.redis) {
         try {
           cached = await this.redis.get(cacheKey);
         } catch (error) {
@@ -452,14 +493,11 @@ export class CryptoService {
         }
       }
 
-      if (cached) {
-        return JSON.parse(cached);
+      if (cached && useCache) {
+        const parsedCache = JSON.parse(cached);
+        logger.info(`Returning cached portfolio for wallet ${walletId}`);
+        return parsedCache;
       }
-
-      // Check if wallet belongs to user
-      const wallet = await prisma.cryptoWallet.findFirst({
-        where: { id: walletId, userId },
-      });
 
       if (!wallet) {
         throw new CryptoServiceError('Wallet not found', CryptoErrorCodes.WALLET_NOT_FOUND, 404);
@@ -699,10 +737,17 @@ export class CryptoService {
         } */
       };
 
-      // Cache for 5 minutes (if Redis available)
-      if (this.redis) {
+      // Dynamic cache duration based on wallet age and sync status
+      if (this.redis && useCache) {
         try {
-          await this.redis.setex(cacheKey, 300, JSON.stringify(portfolioResponse));
+          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+          const isRecentlyAdded = wallet.createdAt > tenMinutesAgo;
+
+          // Use shorter cache for recently added wallets, longer for established ones
+          const cacheDuration = isRecentlyAdded ? 60 : 300; // 1 minute vs 5 minutes
+
+          await this.redis.setex(cacheKey, cacheDuration, JSON.stringify(portfolioResponse));
+          logger.info(`Cached portfolio for wallet ${walletId} for ${cacheDuration} seconds`);
         } catch (error) {
           logger.warn('Redis cache write failed:', error);
         }
@@ -1001,7 +1046,7 @@ export class CryptoService {
       const pages = Math.ceil(total / pagination.limit);
 
       // Transform BigInt fields to strings for JSON serialization
-      const serializedNfts = nfts.map(nft => this.serializeNFT(nft));
+      const serializedNfts = nfts.map((nft) => this.serializeNFT(nft));
 
       return {
         data: serializedNfts,
@@ -1132,15 +1177,15 @@ export class CryptoService {
 
   private serializeBigIntFields(obj: any): any {
     if (obj === null || obj === undefined) return obj;
-    
+
     if (typeof obj === 'bigint') {
       return obj.toString();
     }
-    
+
     if (Array.isArray(obj)) {
-      return obj.map(item => this.serializeBigIntFields(item));
+      return obj.map((item) => this.serializeBigIntFields(item));
     }
-    
+
     if (typeof obj === 'object') {
       const serialized: any = {};
       for (const [key, value] of Object.entries(obj)) {
@@ -1148,7 +1193,7 @@ export class CryptoService {
       }
       return serialized;
     }
-    
+
     return obj;
   }
 
@@ -1222,6 +1267,10 @@ export class CryptoService {
         jobId: job.id,
         options,
       });
+
+      // Clear cache to ensure fresh data after sync
+      await this.clearWalletCache(walletId);
+      await this.clearUserCache(userId);
 
       return {
         success: true,
@@ -1405,16 +1454,19 @@ export class CryptoService {
       const [assetsResponse, nftsResponse, transactionsResponse] = await Promise.all([
         // Always fetch assets
         this.zapperService.getWalletAssets([wallet.address], chainIds),
-        
+
         // Fetch NFTs if requested (default true)
-        options.includeNFTs !== false 
+        options.includeNFTs !== false
           ? this.zapperService.getWalletNFTs([wallet.address], chainIds)
           : Promise.resolve(null),
-        
+
         // Fetch transactions if requested
-        options.includeTransactions 
-          ? this.zapperService.getWalletTransactions([wallet.address], options.maxTransactions || 20)
-          : Promise.resolve(null)
+        options.includeTransactions
+          ? this.zapperService.getWalletTransactions(
+              [wallet.address],
+              options.maxTransactions || 20
+            )
+          : Promise.resolve(null),
       ]);
       // Process Zapper data into our format using individual responses
       const zapperData = this.processZapperIndividualData(
@@ -1422,11 +1474,10 @@ export class CryptoService {
         {
           assets: assetsResponse,
           nfts: nftsResponse,
-          transactions: transactionsResponse
+          transactions: transactionsResponse,
         },
         options
       );
-      
 
       // Cache for 5 minutes (if Redis available)
       if (this.redis) {
@@ -1507,7 +1558,6 @@ export class CryptoService {
       nftCount: parseInt(portfolio.nftBalances.totalTokensOwned || '0'),
     };
 
-
     // Process NFTs
     const nfts =
       options.includeNFTs !== false
@@ -1533,8 +1583,6 @@ export class CryptoService {
     };
   }
 
-
-
   private processZapperIndividualData(
     address: string,
     responses: {
@@ -1549,7 +1597,7 @@ export class CryptoService {
     // Calculate portfolio summary from individual responses
     const tokenValue = assets?.portfolioV2?.tokenBalances?.totalBalanceUSD || 0;
     const nftValue = nfts?.portfolioV2?.nftBalances?.totalBalanceUSD || 0;
-    
+
     const portfolioSummary = {
       totalValueUsd: tokenValue + nftValue,
       tokenValue: tokenValue,
@@ -1562,48 +1610,41 @@ export class CryptoService {
 
     // Process NFTs from NFTs response
     const processedNfts =
-    options.includeNFTs !== false &&
-    nfts?.portfolioV2?.nftBalances?.byToken?.edges
-      ? nfts.portfolioV2.nftBalances.byToken.edges
-          .filter((edge: any) => (edge?.node?.token?.collection?.spamScore || 0) < 75)
-          .map((edge: any) => ({
-            tokenId: edge?.node?.token?.tokenId,
-            name: edge?.node?.token?.name || 'Unnamed NFT',
-            imageUrl:
-              edge.node.token.mediasV3?.images.edges[0]?.node?.medium ||
-              edge.node.token.mediasV3?.images.edges[0]?.node?.large ||
-              null,
-            estimatedValueUsd: edge.node.token.estimatedValue?.valueUsd || 0,
-            valueNative: edge.node.token.estimatedValue?.valueWithDenomination || 0,
-            valueNativeSymbol: edge.node.token.estimatedValue?.denomination?.symbol || null,
-            collectionName:
-              edge.node.token.collection?.name || edge.node.collection?.displayName,
-            collection_imageUrl:
-              edge?.node?.token?.collection?.medias?.medium ||
-              edge.node.collection?.medias?.large ||
-              null,
-            spamScore: edge?.node?.token?.collection?.spamScore || 0,
-            collectionAddress: edge?.node?.token?.collection?.address,
-          }))
-      : [];
-
+      options.includeNFTs !== false && nfts?.portfolioV2?.nftBalances?.byToken?.edges
+        ? nfts.portfolioV2.nftBalances.byToken.edges
+            .filter((edge: any) => (edge?.node?.token?.collection?.spamScore || 0) < 75)
+            .map((edge: any) => ({
+              tokenId: edge?.node?.token?.tokenId,
+              name: edge?.node?.token?.name || 'Unnamed NFT',
+              imageUrl:
+                edge.node.token.mediasV3?.images.edges[0]?.node?.medium ||
+                edge.node.token.mediasV3?.images.edges[0]?.node?.large ||
+                null,
+              estimatedValueUsd: edge.node.token.estimatedValue?.valueUsd || 0,
+              valueNative: edge.node.token.estimatedValue?.valueWithDenomination || 0,
+              valueNativeSymbol: edge.node.token.estimatedValue?.denomination?.symbol || null,
+              collectionName: edge.node.token.collection?.name || edge.node.collection?.displayName,
+              collection_imageUrl:
+                edge?.node?.token?.collection?.medias?.medium ||
+                edge.node.collection?.medias?.large ||
+                null,
+              spamScore: edge?.node?.token?.collection?.spamScore || 0,
+              collectionAddress: edge?.node?.token?.collection?.address,
+            }))
+        : [];
 
     // Process transactions if available
 
     return {
       address,
       portfolioSummary,
-    
-    // Not available in individual asset/NFT calls
+
+      // Not available in individual asset/NFT calls
       nfts: processedNfts,
-  
+
       lastUpdated: new Date(),
     };
   }
-
-
-
-
 
   async getJobStatus(jobId: string) {
     try {
@@ -1660,7 +1701,7 @@ export class CryptoService {
   // CACHE MANAGEMENT
   // ===============================
 
-  private async clearWalletCache(walletId: string) {
+  async clearWalletCache(walletId: string) {
     if (!this.redis) return;
 
     const keys = [

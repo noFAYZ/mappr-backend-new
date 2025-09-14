@@ -503,7 +503,6 @@ export enum CacheKeys {
 // ===============================
 
 export interface ZapperPortfolioSummary {
- 
   nftValue: number;
 
   nftCount: number;
@@ -549,7 +548,7 @@ export interface ZapperWalletData {
   address: string;
   portfolioSummary: ZapperPortfolioSummary;
   nfts: ZapperNFTItem[];
-  
+
   lastUpdated: Date;
 }
 

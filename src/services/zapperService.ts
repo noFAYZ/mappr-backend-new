@@ -267,13 +267,13 @@ export class ZapperService {
       const [assets, nfts, transactions] = await Promise.all([
         this.getWalletAssets(addresses, chainIds),
         this.getWalletNFTs(addresses, chainIds),
-        this.getWalletTransactions(addresses, 20) // Default to 20 recent transactions
+        this.getWalletTransactions(addresses, 20), // Default to 20 recent transactions
       ]);
 
       return {
         assets,
         nfts,
-        transactions
+        transactions,
       };
     } catch (error) {
       logger.error('Error fetching combined Zapper portfolio:', error);

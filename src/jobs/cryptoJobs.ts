@@ -535,6 +535,24 @@ export class CryptoJobProcessor {
 
     try {
       await job.updateProgress(0);
+
+      // Publish sync started event
+ /*      await userSyncProgressManager.publishProgress(userId, walletId, {
+  
+        walletId,
+        progress: 0,
+        status: 'queued',
+        message: 'Full sync job queued',
+        startedAt: new Date()
+      }); */
+
+      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
+        walletId,
+        progress: 0,
+        status: 'queued',
+        message: 'Full sync job queued',
+      });
+
       console.log(`🚀 Starting full wallet sync for ${this.maskAddress(walletId)}`);
 
       const wallet = await prisma.cryptoWallet.findFirst({
@@ -549,7 +567,24 @@ export class CryptoJobProcessor {
         );
       }
 
+      // Publish sync started with wallet info
+      await userSyncProgressManager.publishProgress(userId, walletId, {
+        walletId,
+        progress: 10,
+        status: 'syncing',
+        message: `Starting sync for ${wallet.name} (${wallet.address.substring(0, 10)}...)`,
+        startedAt: new Date()
+      });
+
       const results: any = { walletId, syncedData: [], apiMetrics: {} };
+
+      // Publish portfolio sync start
+      await userSyncProgressManager.publishProgress(userId, walletId, {
+        walletId,
+        progress: 20,
+        status: 'syncing_assets',
+        message: 'Fetching portfolio data...',
+      });
 
       // Track portfolio API call
       const portfolio = await trackApiCall('getWalletPortfolio', () =>
@@ -569,6 +604,14 @@ export class CryptoJobProcessor {
       }
 
       if (shouldSyncTransactions) {
+        // Publish transaction sync start
+        await userSyncProgressManager.publishProgress(userId, walletId, {
+          walletId,
+          progress: 50,
+          status: 'syncing_transactions',
+          message: 'Fetching transaction history...',
+        });
+
         // Get the last transaction timestamp from database for incremental sync
         const lastTransaction = await prisma.cryptoTransaction.findFirst({
           where: { walletId: wallet.id },
@@ -615,6 +658,14 @@ export class CryptoJobProcessor {
       }
 
       if (shouldSyncNFTs && this.zapperService) {
+        // Publish NFT sync start
+        await userSyncProgressManager.publishProgress(userId, walletId, {
+          walletId,
+          progress: 70,
+          status: 'syncing_nfts',
+          message: 'Fetching NFT collections...',
+        });
+
         try {
           // Track portfolio API call
           const nfts = await trackApiCall('getWalletNFTs', () =>
@@ -649,6 +700,14 @@ export class CryptoJobProcessor {
         await job.updateProgress(90);
       }
 
+      // Publish final progress
+      await userSyncProgressManager.publishProgress(userId, walletId, {
+        walletId,
+        progress: 95,
+        status: 'syncing',
+        message: 'Finalizing sync...',
+      });
+
       await prisma.cryptoWallet.update({
         where: { id: walletId },
         data: {
@@ -679,6 +738,13 @@ export class CryptoJobProcessor {
       };
 
       await job.updateProgress(100);
+
+       await userSyncProgressManager.broadcastWalletCompleted(userId, walletId, {
+   
+        progress: 100,
+        status: 'completed',
+        message: 'Wallet Sync Complete',
+      });
 
       console.log(`✅ Wallet sync completed - ${results.syncedData.join(', ')}`);
 

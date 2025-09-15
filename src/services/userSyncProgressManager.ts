@@ -24,7 +24,8 @@ export interface UserConnection {
 
 export class UserSyncProgressManager {
   private connections = new Map<string, UserConnection>();
-  private redis: Redis | null = null;
+  private redisSubscriber: Redis | null = null;
+  private redisPublisher: Redis | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
   private readonly CONNECTION_TIMEOUT = 60000; // 60 seconds
@@ -39,26 +40,28 @@ export class UserSyncProgressManager {
     const redisUrl = process.env['REDIS_URL'];
     if (redisUrl) {
       try {
-        this.redis = new Redis(redisUrl);
+        this.redisSubscriber = new Redis(redisUrl);
+        this.redisPublisher = new Redis(redisUrl);
 
-        // Subscribe to sync progress events
-        this.redis.subscribe('wallet_sync_progress', 'wallet_sync_completed', 'wallet_sync_failed');
+        this.redisSubscriber.subscribe('wallet_sync_progress', 'wallet_sync_completed', 'wallet_sync_failed');
 
-        this.redis.on('message', (channel, message) => {
+        this.redisSubscriber.on('message', (channel, message) => {
           this.handleRedisMessage(channel, message);
         });
 
-        logger.info('UserSyncProgressManager: Redis initialized and subscribed to sync events');
+        logger.info('UserSyncProgressManager: Redis subscriber and publisher initialized');
       } catch (error) {
         logger.error('UserSyncProgressManager: Failed to initialize Redis:', error);
-        this.redis = null;
+        this.redisSubscriber = null;
+        this.redisPublisher = null;
       }
     } else {
       logger.warn('UserSyncProgressManager: REDIS_URL not configured - real-time updates disabled');
     }
   }
 
-  private handleRedisMessage(_channel: string, message: string) {
+  private handleRedisMessage(channel: string, message: string) {
+    logger.debug(`UserSyncProgressManager: Received Redis message on channel '${channel}':`, message);
     try {
       const data = JSON.parse(message);
       const { userId, walletId } = data;
@@ -68,7 +71,28 @@ export class UserSyncProgressManager {
         return;
       }
 
-      this.broadcastToUser(userId, data);
+      logger.info(`UserSyncProgressManager: Broadcasting message to user ${userId} for wallet ${walletId}`);
+      
+      // Route based on channel to ensure correct message type
+      let messageType: string;
+      switch (channel) {
+        case 'wallet_sync_progress':
+          messageType = 'wallet_sync_progress';
+          break;
+        case 'wallet_sync_completed':
+          messageType = 'wallet_sync_completed';
+          break;
+        case 'wallet_sync_failed':
+          messageType = 'wallet_sync_failed';
+          break;
+        default:
+          logger.warn('Unknown Redis channel:', channel);
+          return;
+      }
+
+      const broadcastData = { ...data, type: messageType };
+      const success = this.broadcastToUser(userId, broadcastData);
+      logger.debug(`UserSyncProgressManager: Broadcast result: ${success}`);
     } catch (error) {
       logger.error('UserSyncProgressManager: Error processing Redis message:', error);
     }
@@ -76,19 +100,21 @@ export class UserSyncProgressManager {
 
   addUserConnection(userId: string, response: Response, walletIds: string[] = []): boolean {
     try {
-      // Check if user already has a connection
       if (this.connections.has(userId)) {
         this.removeUserConnection(userId);
       }
 
-      // Setup SSE headers
+      const origin = (response.req as any)?.headers?.origin || 'http://localhost:3001';
+
       response.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-       
-        'Access-Control-Allow-Headers': 'Cache-Control',
-        'X-Accel-Buffering': 'no' // Disable nginx buffering
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Headers': 'Cache-Control, Authorization, Content-Type',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'X-Accel-Buffering': 'no'
       });
 
       // Send initial connection event
@@ -97,6 +123,16 @@ export class UserSyncProgressManager {
         userId,
         timestamp: new Date().toISOString()
       });
+
+      // Send immediate heartbeat
+      setTimeout(() => {
+        if (!response.destroyed && this.connections.has(userId)) {
+          this.writeSSEMessage(response, {
+            type: 'heartbeat',
+            timestamp: new Date().toISOString()
+          });
+        }
+      }, 1000);
 
       const connection: UserConnection = {
         userId,
@@ -108,8 +144,13 @@ export class UserSyncProgressManager {
 
       this.connections.set(userId, connection);
 
-      // Handle client disconnect
       response.on('close', () => {
+        logger.info(`UserSyncProgressManager: Client disconnected (close event) for user ${userId}`);
+        this.removeUserConnection(userId);
+      });
+
+      response.on('error', (error) => {
+        logger.error(`UserSyncProgressManager: Connection error for user ${userId}:`, error);
         this.removeUserConnection(userId);
       });
 
@@ -156,11 +197,13 @@ export class UserSyncProgressManager {
   broadcastToUser(userId: string, data: any) {
     const connection = this.connections.get(userId);
     if (!connection || connection.response.destroyed) {
+      logger.debug(`UserSyncProgressManager: No active connection for user ${userId}`);
       return false;
     }
 
     try {
       this.writeSSEMessage(connection.response, data);
+      logger.debug(`UserSyncProgressManager: Successfully broadcast to user ${userId}:`, data.type);
       return true;
     } catch (error) {
       logger.error(`UserSyncProgressManager: Error broadcasting to user ${userId}:`, error);
@@ -169,35 +212,47 @@ export class UserSyncProgressManager {
     }
   }
 
-  broadcastWalletProgress(userId: string, walletId: string, progress: WalletSyncProgress) {
+  async broadcastWalletProgress(userId: string, walletId: string, progress: WalletSyncProgress) {
     const connection = this.connections.get(userId);
     if (!connection) {
+      logger.debug(`UserSyncProgressManager: No connection for user ${userId}`);
       return false;
     }
 
-    // Only broadcast if user is tracking this wallet
     if (!connection.walletIds.has(walletId)) {
+      logger.debug(`UserSyncProgressManager: User ${userId} not tracking wallet ${walletId}`);
       return false;
     }
 
     const eventData = {
       type: 'wallet_sync_progress',
-      ...progress,
-      walletId, // Ensure walletId from parameter takes precedence
+      walletId,
+      progress: progress.progress,
+      status: progress.status,
+      message: progress.message,
+      error: progress.error,
+      startedAt: progress.startedAt?.toISOString(),
+      completedAt: progress.completedAt?.toISOString(),
+      syncedData: progress.syncedData,
+      estimatedTimeRemaining: progress.estimatedTimeRemaining,
       timestamp: new Date().toISOString()
     };
 
+    logger.debug(`UserSyncProgressManager: Broadcasting wallet progress:`, eventData);
     return this.broadcastToUser(userId, eventData);
   }
 
   broadcastWalletCompleted(userId: string, walletId: string, result: any) {
     const eventData = {
       type: 'wallet_sync_completed',
-      ...result,
-      walletId, // Ensure walletId from parameter takes precedence
+      walletId,
+
+      syncedData: result.syncedData,
+      completedAt: result.completedAt?.toISOString() || new Date().toISOString(),
       timestamp: new Date().toISOString()
     };
 
+    logger.debug(`UserSyncProgressManager: Broadcasting wallet completion:`, eventData);
     return this.broadcastToUser(userId, eventData);
   }
 
@@ -205,46 +260,65 @@ export class UserSyncProgressManager {
     const eventData = {
       type: 'wallet_sync_failed',
       walletId,
-      error: error.message || 'Unknown error',
+      error: error.message || error || 'Unknown error',
       timestamp: new Date().toISOString()
     };
 
+    logger.debug(`UserSyncProgressManager: Broadcasting wallet failure:`, eventData);
     return this.broadcastToUser(userId, eventData);
   }
 
   // Publish progress to Redis for broadcasting to all instances
   async publishProgress(userId: string, walletId: string, progress: WalletSyncProgress) {
-    if (!this.redis) {
-      // Fallback: broadcast directly if Redis not available
+    logger.info(`UserSyncProgressManager: Publishing progress for user ${userId}, wallet ${walletId}:`, progress);
+
+    if (!this.redisPublisher) {
+      logger.info('UserSyncProgressManager: Redis publisher not available, using direct broadcast');
       this.broadcastWalletProgress(userId, walletId, progress);
       return;
     }
 
     try {
-      await this.redis.publish('wallet_sync_progress', JSON.stringify({
+      const message = JSON.stringify({
         userId,
-        ...progress,
-        walletId // Ensure walletId from parameter takes precedence
-      }));
+        walletId,
+        progress: progress.progress,
+        status: progress.status,
+        message: progress.message,
+        error: progress.error,
+        startedAt: progress.startedAt?.toISOString(),
+        completedAt: progress.completedAt?.toISOString(),
+        syncedData: progress.syncedData,
+        estimatedTimeRemaining: progress.estimatedTimeRemaining
+      });
+      
+      logger.debug(`UserSyncProgressManager: Publishing to Redis channel 'wallet_sync_progress':`, message);
+      await this.redisPublisher.publish('wallet_sync_progress', message);
+      logger.debug('UserSyncProgressManager: Successfully published to Redis');
     } catch (error) {
       logger.error('UserSyncProgressManager: Error publishing progress:', error);
-      // Fallback to direct broadcast
       this.broadcastWalletProgress(userId, walletId, progress);
     }
   }
 
   async publishCompleted(userId: string, walletId: string, result: any) {
-    if (!this.redis) {
+    logger.info(`UserSyncProgressManager: Publishing completion for user ${userId}, wallet ${walletId}`);
+
+    if (!this.redisPublisher) {
       this.broadcastWalletCompleted(userId, walletId, result);
       return;
     }
 
     try {
-      await this.redis.publish('wallet_sync_completed', JSON.stringify({
+      const message = JSON.stringify({
         userId,
         walletId,
-        ...result
-      }));
+        syncedData: result.syncedData,
+        completedAt: result.completedAt?.toISOString() || new Date().toISOString()
+      });
+
+      await this.redisPublisher.publish('wallet_sync_completed', message);
+      logger.debug('UserSyncProgressManager: Successfully published completion to Redis');
     } catch (error) {
       logger.error('UserSyncProgressManager: Error publishing completion:', error);
       this.broadcastWalletCompleted(userId, walletId, result);
@@ -252,17 +326,22 @@ export class UserSyncProgressManager {
   }
 
   async publishFailed(userId: string, walletId: string, error: any) {
-    if (!this.redis) {
+    logger.info(`UserSyncProgressManager: Publishing failure for user ${userId}, wallet ${walletId}`);
+
+    if (!this.redisPublisher) {
       this.broadcastWalletFailed(userId, walletId, error);
       return;
     }
 
     try {
-      await this.redis.publish('wallet_sync_failed', JSON.stringify({
+      const message = JSON.stringify({
         userId,
         walletId,
-        error
-      }));
+        error: error.message || error || 'Unknown error'
+      });
+
+      await this.redisPublisher.publish('wallet_sync_failed', message);
+      logger.debug('UserSyncProgressManager: Successfully published failure to Redis');
     } catch (error) {
       logger.error('UserSyncProgressManager: Error publishing failure:', error);
       this.broadcastWalletFailed(userId, walletId, error);
@@ -270,8 +349,18 @@ export class UserSyncProgressManager {
   }
 
   private writeSSEMessage(response: Response, data: any) {
-    const message = `data: ${JSON.stringify(data)}\n\n`;
-    response.write(message);
+    try {
+      const message = `data: ${JSON.stringify(data)}\n\n`;
+      if (!response.destroyed) {
+        response.write(message);
+        if (typeof response.flush === 'function') {
+          response.flush();
+        }
+      }
+    } catch (error) {
+      logger.error('UserSyncProgressManager: Error writing SSE message:', error);
+      throw error;
+    }
   }
 
   private startHeartbeat() {
@@ -283,9 +372,9 @@ export class UserSyncProgressManager {
         const timeSinceLastHeartbeat = now.getTime() - connection.lastHeartbeat.getTime();
 
         if (timeSinceLastHeartbeat > this.CONNECTION_TIMEOUT) {
+          logger.info(`UserSyncProgressManager: Connection timeout for user ${userId}`);
           toRemove.push(userId);
         } else {
-          // Send heartbeat
           try {
             this.writeSSEMessage(connection.response, {
               type: 'heartbeat',
@@ -293,12 +382,12 @@ export class UserSyncProgressManager {
             });
             connection.lastHeartbeat = now;
           } catch (error) {
+            logger.warn(`UserSyncProgressManager: Failed to send heartbeat to user ${userId}:`, error);
             toRemove.push(userId);
           }
         }
       }
 
-      // Remove stale connections
       toRemove.forEach(userId => this.removeUserConnection(userId));
 
       if (toRemove.length > 0) {
@@ -315,13 +404,15 @@ export class UserSyncProgressManager {
         clearInterval(this.heartbeatInterval);
       }
 
-      // Close all connections
       for (const userId of this.connections.keys()) {
         this.removeUserConnection(userId);
       }
 
-      if (this.redis) {
-        this.redis.disconnect();
+      if (this.redisPublisher) {
+        this.redisPublisher.disconnect();
+      }
+      if (this.redisSubscriber) {
+        this.redisSubscriber.disconnect();
       }
 
       logger.info('UserSyncProgressManager: Shutdown complete');
@@ -346,7 +437,8 @@ export class UserSyncProgressManager {
 
   // Health check
   isHealthy(): boolean {
-    return this.redis ? this.redis.status === 'ready' : true;
+    return (this.redisPublisher?.status === 'ready' && this.redisSubscriber?.status === 'ready') ||
+           (!this.redisPublisher && !this.redisSubscriber);
   }
 }
 

@@ -1321,9 +1321,168 @@ export class CryptoController {
     }
   }
 
+
+  async getDeFiAnalytics(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate params
+      const { walletId } = WalletParamsSchema.parse(req.params);
+
+      // Import service here to avoid circular dependencies
+      const { defiPositionService } = await import('@/services/defiPositionService');
+
+      const analytics = await defiPositionService.getDeFiAnalytics(userId, walletId);
+
+      logger.info(`DeFi analytics calculated for user ${userId}`, {
+        userId,
+        walletId,
+        totalValueUsd: analytics.summary.totalValueUsd,
+        protocolCount: analytics.summary.protocolCount,
+      });
+
+      res.json({
+        success: true,
+        data: analytics,
+        message: 'DeFi analytics retrieved successfully',
+      });
+
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async syncWalletDeFiPositions(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate params
+      const { walletId } = WalletParamsSchema.parse(req.params);
+
+      // Parse options
+      const forceRefresh = req.query['forceRefresh'] === 'true';
+      const syncOptions = {
+        includeClaimable: req.query['includeClaimable'] !== 'false',
+        includeLending: req.query['includeLending'] !== 'false',
+        includeLiquidity: req.query['includeLiquidity'] !== 'false',
+      };
+
+      // Enqueue DeFi sync job
+      const { cryptoSyncQueue, JOB_TYPES } = await import('@/config/queue');
+
+      if (!cryptoSyncQueue) {
+        throw new Error('Queue system is not available');
+      }
+
+      const job = await cryptoSyncQueue.add(
+        JOB_TYPES.SYNC_DEFI,
+        {
+          userId,
+          walletId,
+          forceRefresh,
+          syncOptions,
+        },
+        {
+          priority: forceRefresh ? 5 : 3, // Higher priority for forced refresh
+          delay: 0,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+        }
+      );
+
+      logger.info(`DeFi sync job queued for user ${userId}`, {
+        userId,
+        walletId,
+        jobId: job.id,
+        forceRefresh,
+        syncOptions,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          jobId: job.id,
+          walletId,
+          syncOptions,
+          estimatedCompletionTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(), // 2 minutes
+        },
+        message: 'DeFi sync job initiated successfully',
+      });
+
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  async updateDeFiPositionMetrics(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError('User authentication required', 401);
+      }
+
+      // Validate params
+      const { positionId } = req.params;
+
+      if (!positionId) {
+        throw new AppError('Position ID is required', 400);
+      }
+
+      // Validate updates
+      const updates: any = {};
+      if (req.body.apr !== undefined) {
+        updates.apr = Number(req.body.apr);
+      }
+      if (req.body.apy !== undefined) {
+        updates.apy = Number(req.body.apy);
+      }
+      if (req.body.yieldEarnedUsd !== undefined) {
+        updates.yieldEarnedUsd = Number(req.body.yieldEarnedUsd);
+      }
+
+      if (Object.keys(updates).length === 0) {
+        throw new AppError('No valid updates provided', 400);
+      }
+
+      // Import service here to avoid circular dependencies
+      const { defiPositionService } = await import('@/services/defiPositionService');
+
+      const updatedPosition = await defiPositionService.updatePositionMetrics(
+        userId,
+        positionId,
+        updates
+      );
+
+      logger.info(`DeFi position metrics updated by user ${userId}`, {
+        userId,
+        positionId,
+        updates,
+      });
+
+      res.json({
+        success: true,
+        data: updatedPosition,
+        message: 'Position metrics updated successfully',
+      });
+
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
   // ===============================
   // PRIVATE HELPER METHODS
   // ===============================
+
 
   private handleError(error: any, res: Response) {
     // Handle CryptoServiceError

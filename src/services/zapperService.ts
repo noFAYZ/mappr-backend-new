@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { logger } from '@/utils/logger';
 import { BlockchainNetwork } from '@prisma/client';
+import { GraphQLResponse } from '@/utils/zapper/appBalanceParser';
 
 // Zapper-specific types
 export interface ZapperPortfolioToken {
@@ -415,6 +416,315 @@ export class ZapperService {
       );
     }
   }
+
+  async getWalletDefiPositions(addresses: string[], chainIds?: number[]): Promise<GraphQLResponse> {
+    const query = `
+    query AppBalances($addresses: [Address!]!, $first: Int = 10) {
+  portfolioV2(addresses: $addresses) {
+    appBalances {
+      # Total value of all app positions
+      totalBalanceUSD
+      
+      # Group positions by application
+      byApp(first: $first) {
+        totalCount
+        edges {
+          node {
+            # App metadata
+            balanceUSD
+            app {
+              displayName
+              imgUrl
+              description
+              slug
+              url
+              category {
+                name
+              }
+            }
+            network {
+              name
+              slug
+              chainId
+            }
+            
+            # Position details with underlying assets
+            positionBalances(first: 10) {
+              edges {
+                node {
+                  # App token positions (e.g. LP tokens, wstETH, wrapped tokens)
+                  ... on AppTokenPositionBalance {
+                    type
+                    address
+                    network
+                    symbol
+                    decimals
+                    balance
+                    balanceUSD
+                    price
+                    appId
+                    groupId
+                    groupLabel
+                    supply
+                    pricePerShare
+                    
+                    # LEVEL 1: Direct underlying tokens (e.g. wstETH -> stETH)
+                    tokens {
+                      # Base tokens at level 1 (e.g. USDC, DAI in a LP)
+                      ... on BaseTokenPositionBalance {
+                        type
+                        address
+                        network
+                        balance
+                        balanceUSD
+                        price
+                        symbol
+                        decimals
+                      }
+                      
+                      # App tokens at level 1 (e.g. stETH underlying wstETH)
+                      ... on AppTokenPositionBalance {
+                        type
+                        address
+                        network
+                        balance
+                        balanceUSD
+                        price
+                        symbol
+                        decimals
+                        appId
+                        supply
+                        pricePerShare
+                        
+                        # LEVEL 2: Underlying of the underlying (e.g. stETH -> ETH)
+                        tokens {
+                          # Base tokens at level 2
+                          ... on BaseTokenPositionBalance {
+                            type
+                            address
+                            network
+                            balance
+                            balanceUSD
+                            price
+                            symbol
+                            decimals
+                          }
+                          
+                          # App tokens at level 2 (for complex nested positions)
+                          ... on AppTokenPositionBalance {
+                            type
+                            address
+                            network
+                            balance
+                            balanceUSD
+                            price
+                            symbol
+                            decimals
+                            appId
+                            supply
+                            pricePerShare
+                            
+                            # LEVEL 3: Third level of underlying tokens
+                            # This covers cases like: complexLP -> simpleLP -> baseTokens
+                            tokens {
+                              # Usually base tokens at this level
+                              ... on BaseTokenPositionBalance {
+                                type
+                                address
+                                network
+                                balance
+                                balanceUSD
+                                price
+                                symbol
+                                decimals
+                              }
+                              
+                              # Rare but possible: another app token
+                              ... on AppTokenPositionBalance {
+                                type
+                                address
+                                network
+                                balance
+                                balanceUSD
+                                price
+                                symbol
+                                decimals
+                                appId
+                                supply
+                                pricePerShare
+                                # Not going deeper than 3 levels
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    
+                    # Detailed display properties 
+                    displayProps {
+                      label
+                      images
+                      balanceDisplayMode
+                    }
+                  }
+                  
+                  # Contract positions (e.g. lending, farming, vaults)
+                  ... on ContractPositionBalance {
+                    type
+                    address
+                    network
+                    appId
+                    groupId
+                    groupLabel
+                    balanceUSD
+                    
+                    # Underlying tokens with meta-types (SUPPLIED, BORROWED, CLAIMABLE, etc.)
+                    tokens {
+                      metaType
+                      token {
+                        # LEVEL 1: Direct tokens in the contract position
+                        # Base tokens (e.g. supplied USDC)
+                        ... on BaseTokenPositionBalance {
+                          type
+                          address
+                          network
+                          balance
+                          balanceUSD
+                          price
+                          symbol
+                          decimals
+                        }
+                        
+                        # App tokens in contract positions (e.g. supplied aUSDC)
+                        ... on AppTokenPositionBalance {
+                          type
+                          address
+                          network
+                          balance
+                          balanceUSD
+                          price
+                          symbol
+                          decimals
+                          appId
+                          supply
+                          pricePerShare
+                          
+                          # LEVEL 2: Underlying of app tokens in contract positions
+                          tokens {
+                            # Base tokens at level 2
+                            ... on BaseTokenPositionBalance {
+                              type
+                              address
+                              network
+                              balance
+                              balanceUSD
+                              price
+                              symbol
+                              decimals
+                            }
+                            
+                            # App tokens at level 2
+                            ... on AppTokenPositionBalance {
+                              type
+                              address
+                              network
+                              balance
+                              balanceUSD
+                              price
+                              symbol
+                              decimals
+                              appId
+                              supply
+                              pricePerShare
+                              
+                              # LEVEL 3: Third level for complex contract positions
+                              tokens {
+                                # Base tokens at level 3
+                                ... on BaseTokenPositionBalance {
+                                  type
+                                  address
+                                  network
+                                  balance
+                                  balanceUSD
+                                  price
+                                  symbol
+                                  decimals
+                                }
+                                
+                                # App tokens at level 3 (rare but possible)
+                                ... on AppTokenPositionBalance {
+                                  type
+                                  address
+                                  network
+                                  balance
+                                  balanceUSD
+                                  price
+                                  symbol
+                                  decimals
+                                  appId
+                                  supply
+                                  pricePerShare
+                                  # Not going deeper than 3 levels
+                                }
+                              }
+                            }
+                          }
+                        }
+                        
+                        # NFT positions (no further nesting needed)
+                        ... on NonFungiblePositionBalance {
+                          type
+                          address
+                          network
+                          balance
+                          balanceUSD
+                          price
+                          symbol
+                          decimals
+                        }
+                      }
+                    }
+                    
+                    # Detailed display properties 
+                    displayProps {
+                      label
+                      images
+                      balanceDisplayMode
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+    `;
+
+    const variables = {
+      addresses,
+      first:10
+    };
+
+    try {
+      logger.info(`Fetching Zapper DEFI p[ositions] for ${addresses.length} addresses`, {
+        addresses: addresses.slice(0, 3), // Log first 3 for privacy
+        chainIds,
+      });
+
+      return await this.makeGraphQLRequest<GraphQLResponse>(query, variables);
+    } catch (error) {
+      console.log('Error fetching Zapper NFTs:',error);
+      logger.error('Error fetching Zapper NFTs:', error);
+      throw new Error(
+        `Failed to fetch Zapper NFTs: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+
   async getWalletTransactions(
     addresses: string[],
     first = 20,
@@ -736,6 +1046,16 @@ export class ZapperService {
       logger.error('Error in batch portfolio requests:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get app balances (alias for getWalletDefiPositions)
+   * @param addresses - Wallet addresses
+   * @param chainIds - Optional chain IDs to filter
+   * @returns GraphQL response with app balances
+   */
+  async getAppBalances(addresses: string[], chainIds?: number[]): Promise<GraphQLResponse> {
+    return this.getWalletDefiPositions(addresses, chainIds);
   }
 }
 

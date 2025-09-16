@@ -14,6 +14,8 @@ import {
 } from '@/types/crypto';
 import { AssetType, TransactionType, TransactionStatus } from '@prisma/client';
 import ZapperService, { createZapperService } from '@/services/zapperService';
+import { calculateNetWorth,  getClaimableTokens, getLPPositions, getPositionsByProtocol, parseAppBalances  } from '@/utils/zapper/appBalanceParser';
+import { defiPositionService } from '@/services/defiPositionService';
 
 // Enhanced job processing statistics
 interface JobStats {
@@ -25,6 +27,11 @@ interface JobStats {
   peakMemoryUsage: number;
   averageMemoryUsage: number;
   errorBreakdown: Record<string, number>;
+  successCount: number;
+  failureCount: number;
+  totalDuration: number;
+  averageDuration: number;
+  lastExecution: Date | null;
 }
 
 // Job processing context
@@ -57,6 +64,17 @@ export interface CalculatePortfolioJobData {
   userId: string;
   walletId?: string;
   includeAnalytics?: boolean;
+}
+
+export interface SyncDeFiJobData {
+  userId: string;
+  walletId: string;
+  forceRefresh?: boolean;
+  syncOptions?: {
+    includeClaimable?: boolean;
+    includeLending?: boolean;
+    includeLiquidity?: boolean;
+  };
 }
 
 // ===============================
@@ -144,6 +162,11 @@ export class CryptoJobProcessor {
         peakMemoryUsage: 0,
         averageMemoryUsage: 0,
         errorBreakdown: {},
+        successCount: 0,
+        failureCount: 0,
+        totalDuration: 0,
+        averageDuration: 0,
+        lastExecution: null,
       });
     });
 
@@ -695,9 +718,68 @@ export class CryptoJobProcessor {
       }
 
       if (shouldSyncDeFi) {
-        // DeFi position sync would go here
-        results.syncedData.push('defi');
-        await job.updateProgress(90);
+        try {
+          // DeFi position sync using app balances
+          // Map blockchain network to chain ID
+          const chainId = this.getChainIdFromNetwork(wallet.network);
+          const zapperResponse = await trackApiCall('getAppBalances', () =>
+            this.zapperService!.getAppBalances([wallet.address], chainId ? [chainId] : undefined)
+          );
+
+          if (zapperResponse?.portfolioV2) {
+            console.log(`📊 Processing DeFi positions with total value: $${zapperResponse.portfolioV2.appBalances?.totalBalanceUSD || 0}`);
+
+            // Sync DeFi positions to database
+            const syncedPositions = await defiPositionService.syncWalletDeFiPositions(
+              wallet.id,
+              zapperResponse
+            );
+
+            console.log(`🏦 Synced ${syncedPositions.length} DeFi positions to database`);
+
+            // Parse for additional analytics
+            const parsedPositions = parseAppBalances(zapperResponse);
+            const claimableRewards = getClaimableTokens(parsedPositions);
+            const lpPositions = getLPPositions(parsedPositions);
+            const positionsByProtocol = getPositionsByProtocol(parsedPositions);
+            const netWorth = calculateNetWorth(parsedPositions);
+
+            // Log insights
+            if (claimableRewards.length > 0) {
+              const totalClaimable = claimableRewards.reduce((sum, reward) => sum + reward.balanceUSD, 0);
+              console.log(`🎁 ${claimableRewards.length} claimable rewards worth $${totalClaimable.toFixed(2)}`);
+            }
+
+            console.log(`🤝 ${Object.keys(positionsByProtocol).length} protocols engaged`);
+
+            if (lpPositions.length > 0) {
+              const totalLPValue = lpPositions.reduce((sum, lp) => sum + lp.balanceUSD, 0);
+              console.log(`🏊 ${lpPositions.length} LP positions worth $${totalLPValue.toFixed(2)}`);
+            }
+
+            console.log(`💰 Net worth: $${netWorth.netWorth.toFixed(2)} (Supplied: $${netWorth.totalSupplied.toFixed(2)}, Borrowed: $${netWorth.totalBorrowed.toFixed(2)})`);
+
+            // Store DeFi metrics in result
+            results.defiPositions = {
+              totalPositions: syncedPositions.length,
+              totalValueUsd: syncedPositions.reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0),
+              claimableRewards: claimableRewards.length,
+              lpPositions: lpPositions.length,
+              protocolCount: Object.keys(positionsByProtocol).length,
+              netWorth
+            };
+          } else {
+            console.log(`ℹ️ No DeFi positions found for wallet ${wallet.address}`);
+          }
+      
+          results.syncedData.push('defi');
+          await job.updateProgress(90);
+          
+        } catch (error) {
+          console.error('❌ Error parsing DeFi positions:', error);
+          // Handle parsing errors gracefully
+          throw error;
+        }
       }
 
       // Publish final progress
@@ -912,6 +994,136 @@ export class CryptoJobProcessor {
       return { snapshotId: snapshot.id, ...portfolioData };
     } catch (error) {
       logger.error(`Snapshot creation failed for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process DeFi position sync job
+   */
+  async processSyncDeFiPositions(job: Job<SyncDeFiJobData>): Promise<any> {
+    const { userId, walletId, forceRefresh = false, syncOptions = {} } = job.data;
+    const context = this.createJobContext(job, 'SYNC_DEFI');
+
+    try {
+      await job.updateProgress(0);
+
+      logger.info('Starting DeFi positions sync', {
+        userId,
+        walletId,
+        forceRefresh,
+        syncOptions,
+        jobId: context.jobId,
+      });
+
+      // Get wallet info
+      const wallet = await prisma.cryptoWallet.findFirst({
+        where: { id: walletId, userId }
+      });
+
+      if (!wallet) {
+        throw new Error(`Wallet ${walletId} not found for user ${userId}`);
+      }
+
+      await job.updateProgress(10);
+
+      // Check if sync is needed (skip if recent sync exists and not forced)
+      if (!forceRefresh) {
+        const recentSync = await prisma.deFiPosition.findFirst({
+          where: {
+            walletId,
+            syncSource: 'zapper',
+            lastSyncAt: {
+              gte: new Date(Date.now() - 5 * 60 * 1000) // 5 minutes
+            }
+          }
+        });
+
+        if (recentSync) {
+          logger.info('Recent DeFi sync found, skipping', {
+            walletId,
+            lastSyncAt: recentSync.lastSyncAt,
+          });
+          return { message: 'Recent sync found, skipped', lastSyncAt: recentSync.lastSyncAt };
+        }
+      }
+
+      await job.updateProgress(20);
+
+      // Fetch app balances from Zapper
+      if (!this.zapperService) {
+        throw new Error('Zapper service not initialized');
+      }
+
+      const chainId = this.getChainIdFromNetwork(wallet.network);
+      const zapperResponse = await this.zapperService.getAppBalances([wallet.address], chainId ? [chainId] : undefined);
+
+      await job.updateProgress(50);
+
+      if (!zapperResponse?.portfolioV2) {
+        logger.warn('No Zapper app balances data received', {
+          walletId,
+          address: wallet.address,
+          network: wallet.network,
+        });
+        return { message: 'No DeFi positions found' };
+      }
+
+      // Sync DeFi positions using the service
+      const syncedPositions = await defiPositionService.syncWalletDeFiPositions(
+        walletId,
+        zapperResponse
+      );
+
+      await job.updateProgress(80);
+
+      // Parse additional data for analytics
+      const parsedData = parseAppBalances(zapperResponse);
+      const claimableTokens = getClaimableTokens(parsedData);
+      const lpPositions = getLPPositions(parsedData);
+      const protocolPositions = getPositionsByProtocol(parsedData);
+      const netWorth = calculateNetWorth(parsedData);
+
+      await job.updateProgress(90);
+
+      // Update wallet's last sync timestamp
+      await prisma.cryptoWallet.update({
+        where: { id: walletId },
+        data: { lastSyncAt: new Date() }
+      });
+
+      await job.updateProgress(100);
+
+      const result = {
+        syncedPositions: syncedPositions.length,
+        totalValueUsd: syncedPositions.reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0),
+        claimableTokens: claimableTokens.length,
+        lpPositions: lpPositions.length,
+        protocolCount: Object.keys(protocolPositions).length,
+        netWorth,
+        lastSyncAt: new Date(),
+      };
+
+      logger.info('DeFi positions sync completed successfully', {
+        ...result,
+        userId,
+        walletId,
+        jobId: context.jobId,
+      });
+
+      await this.updateJobStats(context, 'success');
+      return result;
+
+    } catch (error) {
+      await this.handleJobError(context, error);
+
+      logger.error('DeFi positions sync failed', {
+        userId,
+        walletId,
+        error: error instanceof Error ? error.message : String(error),
+        jobId: context.jobId,
+      });
+
       throw error;
     }
   }
@@ -1805,6 +2017,49 @@ export class CryptoJobProcessor {
       successRate: edges.length > 0 ? ((processedCount / edges.length) * 100).toFixed(1) : '0',
     });
   }
+
+/*   private async processDefiPositions(
+    walletId: string, 
+    parsedPositions: ParsedAppBalances,
+    insights: {
+      claimableRewards: ClaimableToken[];
+      lpPositions: LPPosition[];
+      positionsByProtocol: Record<string, ProtocolPosition>;
+      netWorth: NetWorthCalculation;
+    }
+  ) {
+    // Store protocol balances
+    for (const app of parsedPositions.apps) {
+      await this.storeProtocolBalance(walletId, {
+        protocol: app.displayName,
+        network: app.network.name,
+        chainId: app.network.chainId,
+        balanceUSD: app.balanceUSD,
+        positionCount: app.positions.length,
+        category: app.category
+      });
+      
+      // Store individual positions
+      for (const position of app.positions) {
+        await this.storePosition(walletId, app.displayName, position);
+      }
+    }
+    
+    // Store claimable rewards for notifications
+    for (const reward of insights.claimableRewards) {
+      if (reward.balanceUSD > 10) { // Only track rewards > $10
+        await this.storeClaimableReward(walletId, reward);
+      }
+    }
+    
+    // Store LP positions for tracking
+    for (const lp of insights.lpPositions) {
+      await this.storeLPPosition(walletId, lp);
+    }
+    
+    // Update wallet total DeFi value
+    await this.updateWalletDefiValue(walletId, parsedPositions.totalBalanceUSD);
+  } */
 
   // ===============================
   // UTILITY METHODS
@@ -2825,6 +3080,72 @@ export class CryptoJobProcessor {
       });
       return null;
     }
+  }
+
+  /**
+   * Update job statistics
+   */
+  private async updateJobStats(context: JobContext, status: 'success' | 'failure'): Promise<void> {
+    const jobType = this.getJobType(context);
+    const stats = this.stats.get(jobType);
+    if (stats) {
+      const duration = Date.now() - context.startTime;
+      stats.lastExecution = new Date();
+
+      if (status === 'success') {
+        stats.successCount++;
+        stats.totalDuration += duration;
+        stats.averageDuration = stats.totalDuration / stats.successCount;
+      } else {
+        stats.failureCount++;
+      }
+    }
+  }
+
+  /**
+   * Handle job errors
+   */
+  private async handleJobError(context: JobContext, error: unknown): Promise<void> {
+    const jobType = this.getJobType(context);
+    const stats = this.stats.get(jobType);
+    if (stats) {
+      const errorType = error instanceof Error ? error.constructor.name : 'UnknownError';
+      stats.errorBreakdown[errorType] = (stats.errorBreakdown[errorType] || 0) + 1;
+    }
+
+    logger.error('Job failed', {
+      jobId: context.jobId,
+      jobType,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+  }
+
+  /**
+   * Get job type from context
+   */
+  private getJobType(context: JobContext): string {
+    // Extract job type from job ID or context
+    return context.jobId.split(':')[0] || 'unknown';
+  }
+
+  /**
+   * Map blockchain network to chain ID
+   */
+  private getChainIdFromNetwork(network: string): number | undefined {
+    const networkMap: Record<string, number> = {
+      'ethereum': 1,
+      'polygon': 137,
+      'arbitrum': 42161,
+      'optimism': 10,
+      'base': 8453,
+      'bsc': 56,
+      'avalanche': 43114,
+      'fantom': 250,
+      'celo': 42220,
+      'linea': 59144,
+    };
+    return networkMap[network.toLowerCase()];
   }
 }
 

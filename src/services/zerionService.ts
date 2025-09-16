@@ -350,6 +350,54 @@ export class ZerionService {
     }
   }
 
+  async getWalletDefiPositions(address: string, options?: any): Promise<any> {
+    const requestId = this.generateRequestId();
+    const startTime = Date.now();
+
+    try {
+      logger.debug('Fetching wallet positions', {
+        requestId,
+        address: this.maskAddress(address),
+        options: options ? Object.keys(options) : [],
+      });
+
+      await this.validateRequest(address, 'address');
+      this.checkCircuitBreaker();
+
+      const response = await this.retryRequest(
+        requestId,
+        'getWalletPositions',
+        async () => {
+          return (
+            (await (this.sdk as any).wallets.getPositions?.(address, {
+              filter: {
+                positions: 'only_complex',
+                trash: 'only_non_trash',
+              },
+            })) || { data: null }
+          );
+        },
+        address
+      );
+
+      const duration = Date.now() - startTime;
+
+      this.recordSuccess(requestId, duration);
+      return response;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error('Error fetching wallet positions', {
+        requestId,
+        address: this.maskAddress(address),
+        duration,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      this.recordFailure(requestId, error);
+      throw this.handleZerionError(error, 'Failed to fetch wallet positions');
+    }
+  }
+
   async getAllWalletPositions(address: string, options?: any): Promise<any> {
     const requestId = this.generateRequestId();
     const startTime = Date.now();

@@ -1837,6 +1837,269 @@ export class CryptoService {
         return true; // Allow unknown networks for now
     }
   }
+
+  // ===============================
+  // DEFI INTEGRATION METHODS
+  // ===============================
+
+  /**
+   * Sync DeFi positions for a wallet
+   */
+  async syncDeFiPositions(userId: string, walletId: string, options?: {
+    forceRefresh?: boolean;
+    includeClaimable?: boolean;
+    includeLending?: boolean;
+    includeLiquidity?: boolean;
+  }): Promise<{
+    jobId: string;
+    estimatedCompletionTime: string;
+  }> {
+    try {
+      // Verify wallet ownership
+      const wallet = await prisma.cryptoWallet.findFirst({
+        where: { id: walletId, userId }
+      });
+
+      if (!wallet) {
+        throw new CryptoServiceError(
+          'Wallet not found or access denied',
+          CryptoErrorCodes.WALLET_NOT_FOUND,
+          404
+        );
+      }
+
+      // Enqueue DeFi sync job
+      if (!cryptoSyncQueue) {
+        throw new CryptoServiceError('Queue system is not available', CryptoErrorCodes.SYNC_FAILED, 503);
+      }
+
+      const job = await cryptoSyncQueue.add(
+        JOB_TYPES.SYNC_DEFI,
+        {
+          userId,
+          walletId,
+          forceRefresh: options?.forceRefresh || false,
+          syncOptions: {
+            includeClaimable: options?.includeClaimable !== false,
+            includeLending: options?.includeLending !== false,
+            includeLiquidity: options?.includeLiquidity !== false,
+          },
+        },
+        {
+          priority: options?.forceRefresh ? 5 : 3,
+          delay: 0,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+        }
+      );
+
+      logger.info('DeFi sync job queued', {
+        userId,
+        walletId,
+        jobId: job.id,
+        options,
+      });
+
+      return {
+        jobId: job.id || 'unknown',
+        estimatedCompletionTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+      };
+
+    } catch (error) {
+      if (error instanceof CryptoServiceError) throw error;
+
+      logger.error('Error syncing DeFi positions:', error);
+      throw new CryptoServiceError(
+        'Failed to sync DeFi positions',
+        CryptoErrorCodes.SYNC_FAILED,
+        500
+      );
+    }
+  }
+
+  /**
+   * Get DeFi positions for a wallet
+   */
+  async getDeFiPositions(
+    userId: string,
+    walletId: string,
+    filters?: {
+      protocolName?: string;
+      protocolType?: string;
+      positionType?: string;
+      network?: BlockchainNetwork;
+      metaType?: string;
+      isActive?: boolean;
+      minValueUsd?: number;
+      maxValueUsd?: number;
+    }
+  ) {
+    try {
+      // Import service here to avoid circular dependencies
+      const { defiPositionService } = await import('@/services/defiPositionService');
+
+      const positions = await defiPositionService.getWalletDeFiPositions(
+        userId,
+        walletId,
+        filters || {}
+      );
+
+      // Calculate summary metrics
+      const summary = {
+        totalValueUsd: positions.reduce((sum, p) => sum + Number(p.totalValueUsd), 0),
+        totalYieldEarned: positions.reduce((sum, p) => sum + Number(p.yieldEarnedUsd || 0), 0),
+        activePositions: positions.filter(p => p.isActive).length,
+        protocolCount: new Set(positions.map(p => p.protocolName)).size,
+        positionsByType: this.groupBy(positions, 'positionType'),
+        positionsByProtocol: this.groupBy(positions, 'protocolName'),
+      };
+
+      return {
+        positions,
+        summary,
+        filters,
+      };
+
+    } catch (error) {
+      logger.error('Error fetching DeFi positions:', error);
+      throw new CryptoServiceError(
+        'Failed to fetch DeFi positions',
+        CryptoErrorCodes.FETCH_FAILED,
+        500
+      );
+    }
+  }
+
+  /**
+   * Get DeFi analytics for a wallet
+   */
+  async getDeFiAnalytics(userId: string, walletId: string) {
+    try {
+      // Import service here to avoid circular dependencies
+      const { defiPositionService } = await import('@/services/defiPositionService');
+
+      return await defiPositionService.getDeFiAnalytics(userId, walletId);
+
+    } catch (error) {
+      logger.error('Error fetching DeFi analytics:', error);
+      throw new CryptoServiceError(
+        'Failed to fetch DeFi analytics',
+        CryptoErrorCodes.ANALYTICS_FAILED,
+        500
+      );
+    }
+  }
+
+  /**
+   * Update DeFi position metrics
+   */
+  async updateDeFiPositionMetrics(
+    userId: string,
+    positionId: string,
+    updates: {
+      apr?: number;
+      apy?: number;
+      yieldEarnedUsd?: number;
+    }
+  ) {
+    try {
+      // Import service here to avoid circular dependencies
+      const { defiPositionService } = await import('@/services/defiPositionService');
+
+      return await defiPositionService.updatePositionMetrics(userId, positionId, updates);
+
+    } catch (error) {
+      logger.error('Error updating DeFi position metrics:', error);
+      throw new CryptoServiceError(
+        'Failed to update position metrics',
+        CryptoErrorCodes.UPDATE_FAILED,
+        500
+      );
+    }
+  }
+
+  /**
+   * Enhanced sync wallet with DeFi support
+   */
+  async syncWalletWithDeFi(
+    userId: string,
+    walletId: string,
+    options: {
+      syncAssets?: boolean;
+      syncTransactions?: boolean;
+      syncNFTs?: boolean;
+      syncDeFi?: boolean;
+    } = {}
+  ): Promise<{ jobId: string; estimatedCompletionTime: string }> {
+    try {
+      // Verify wallet ownership
+      const wallet = await prisma.cryptoWallet.findFirst({
+        where: { id: walletId, userId }
+      });
+
+      if (!wallet) {
+        throw new CryptoServiceError(
+          'Wallet not found or access denied',
+          CryptoErrorCodes.WALLET_NOT_FOUND,
+          404
+        );
+      }
+
+      // Use the enhanced sync job that includes DeFi
+      if (!cryptoSyncQueue) {
+        throw new CryptoServiceError('Queue system is not available', CryptoErrorCodes.SYNC_FAILED, 503);
+      }
+
+      const job = await cryptoSyncQueue.add(
+        JOB_TYPES.SYNC_WALLET_FULL,
+        {
+          userId,
+          walletId,
+          syncAssets: options.syncAssets !== false,
+          syncTransactions: options.syncTransactions !== false,
+          syncNFTs: options.syncNFTs !== false,
+          syncDeFi: options.syncDeFi !== false,
+        },
+        {
+          priority: 3,
+          delay: 0,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+        }
+      );
+
+      logger.info('Enhanced wallet sync job queued', {
+        userId,
+        walletId,
+        jobId: job.id,
+        options,
+      });
+
+      return {
+        jobId: job.id || 'unknown',
+        estimatedCompletionTime: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      };
+
+    } catch (error) {
+      if (error instanceof CryptoServiceError) throw error;
+
+      logger.error('Error syncing wallet with DeFi:', error);
+      throw new CryptoServiceError(
+        'Failed to sync wallet',
+        CryptoErrorCodes.SYNC_FAILED,
+        500
+      );
+    }
+  }
+
+  // Helper method for grouping
+  private groupBy(items: any[], field: string): Record<string, number> {
+    return items.reduce((acc, item) => {
+      const key = String(item[field] || 'Unknown');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  }
 }
 
 export const cryptoService = new CryptoService();

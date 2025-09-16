@@ -200,6 +200,23 @@ export const NFTFiltersSchema = z.object({
 });
 
 export const DeFiFiltersSchema = z.object({
+  protocolName: z.string().min(1).max(50).trim().optional(),
+
+  protocolType: z.string().min(1).max(30).trim().optional(),
+
+  positionType: z.string().min(1).max(30).trim().optional(),
+
+  network: BlockchainNetworkSchema.optional(),
+
+  metaType: z.enum(['SUPPLIED', 'BORROWED', 'CLAIMABLE', 'VESTING', 'LOCKED', 'NFT', 'WALLET']).optional(),
+
+  isActive: z.coerce.boolean().optional(),
+
+  minValueUsd: z.coerce.number().min(0, 'Minimum value must be non-negative').optional(),
+
+  maxValueUsd: z.coerce.number().min(0, 'Maximum value must be non-negative').optional(),
+
+  // Legacy fields for backward compatibility
   protocols: z.array(z.string().min(1).max(50)).max(20, 'Maximum 20 protocols allowed').optional(),
 
   types: z.array(z.string().min(1).max(30)).max(10, 'Maximum 10 position types allowed').optional(),
@@ -207,8 +224,6 @@ export const DeFiFiltersSchema = z.object({
   networks: z.array(BlockchainNetworkSchema).optional(),
 
   minValue: z.coerce.number().min(0, 'Minimum value must be non-negative').optional(),
-
-  isActive: z.coerce.boolean().optional(),
 });
 
 // ===============================
@@ -239,15 +254,6 @@ export const GetWalletNFTsQuerySchema = z.object({
   search: z.string().min(1).max(100).trim().optional(),
 });
 
-export const GetWalletDeFiQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  protocols: z.array(z.string().min(1).max(50)).max(20).optional(),
-  types: z.array(z.string().min(1).max(30)).max(10).optional(),
-  networks: z.array(BlockchainNetworkSchema).optional(),
-  minValue: z.coerce.number().min(0).optional(),
-  isActive: z.coerce.boolean().optional(),
-});
 
 // ===============================
 // PORTFOLIO SCHEMAS
@@ -441,11 +447,6 @@ export const GetWalletNFTsRequestSchema = z.object({
   query: GetWalletNFTsQuerySchema,
 });
 
-export const GetWalletDeFiRequestSchema = z.object({
-  params: WalletParamsSchema,
-  query: GetWalletDeFiQuerySchema,
-});
-
 // New flexible schemas that support both wallet ID and address
 export const GetWalletDetailsFlexibleRequestSchema = z.object({
   query: z
@@ -510,6 +511,20 @@ export const GetWalletNFTsFlexibleRequestSchema = z.object({
     }),
 });
 
+// DeFi Query Schema (moved here to avoid forward reference issues)
+export const GetWalletDeFiQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  protocolName: z.string().trim().optional(),
+  protocolType: z.string().trim().optional(),
+  positionType: z.string().trim().optional(),
+  network: z.string().trim().optional(),
+  metaType: z.enum(['SUPPLIED', 'BORROWED', 'CLAIMABLE', 'VESTING', 'LOCKED', 'NFT', 'WALLET']).optional(),
+  isActive: z.coerce.boolean().optional(),
+  minValueUsd: z.coerce.number().min(0).optional(),
+  maxValueUsd: z.coerce.number().min(0).optional(),
+});
+
 export const GetWalletDeFiFlexibleRequestSchema = z.object({
   query: z
     .object({
@@ -547,6 +562,43 @@ export const ExportDataRequestSchema = z.object({
 });
 
 // ===============================
+// DEFI SPECIFIC SCHEMAS
+// ===============================
+
+export const SyncDeFiOptionsSchema = z.object({
+  forceRefresh: z.coerce.boolean().default(false),
+  includeClaimable: z.coerce.boolean().default(true),
+  includeLending: z.coerce.boolean().default(true),
+  includeLiquidity: z.coerce.boolean().default(true),
+});
+
+export const UpdateDeFiPositionMetricsSchema = z.object({
+  apr: z.coerce.number().min(0).max(10000).optional(), // Max 10000% APR
+  apy: z.coerce.number().min(0).max(10000).optional(), // Max 10000% APY
+  yieldEarnedUsd: z.coerce.number().min(0).optional(),
+});
+
+export const DeFiPositionParamsSchema = z.object({
+  positionId: z.string().min(1, 'Position ID is required'),
+});
+
+// Combined request schemas for endpoints
+export const GetWalletDeFiRequestSchema = z.object({
+  params: WalletParamsSchema,
+  query: GetWalletDeFiQuerySchema,
+});
+
+export const SyncWalletDeFiRequestSchema = z.object({
+  params: WalletParamsSchema,
+  query: SyncDeFiOptionsSchema,
+});
+
+export const UpdateDeFiPositionRequestSchema = z.object({
+  params: DeFiPositionParamsSchema,
+  body: UpdateDeFiPositionMetricsSchema,
+});
+
+// ===============================
 // TYPE EXPORTS
 // ===============================
 
@@ -560,3 +612,9 @@ export type SyncWalletRequest = z.infer<typeof SyncWalletSchema>;
 export type AnalyticsQuery = z.infer<typeof AnalyticsQuerySchema>;
 export type ExportRequest = z.infer<typeof ExportRequestSchema>;
 export type WebhookConfig = z.infer<typeof WebhookConfigSchema>;
+
+// DeFi specific types
+export type GetWalletDeFiQuery = z.infer<typeof GetWalletDeFiQuerySchema>;
+export type SyncDeFiOptions = z.infer<typeof SyncDeFiOptionsSchema>;
+export type UpdateDeFiPositionMetrics = z.infer<typeof UpdateDeFiPositionMetricsSchema>;
+export type DeFiPositionParams = z.infer<typeof DeFiPositionParamsSchema>;

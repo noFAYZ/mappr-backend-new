@@ -476,36 +476,53 @@ model CryptoNFT {
 }
 
 model DeFiPosition {
-  id              String            @id @default(cuid())
-  walletId        String
-  protocolName    String
-  protocolType    String
-  contractAddress String
-  network         BlockchainNetwork
-  positionType    String
-  poolName        String?
-  totalValueUsd   Decimal           @db.Decimal(12, 2)
-  principalUsd    Decimal?          @db.Decimal(12, 2)
-  yieldEarned     Decimal?          @db.Decimal(12, 2)
-  yieldEarnedUsd  Decimal?          @db.Decimal(12, 2)
-  apr             Decimal?          @db.Decimal(8, 4)
-  apy             Decimal?          @db.Decimal(8, 4)
-  dailyYield      Decimal?          @db.Decimal(12, 2)
-  totalReturn     Decimal?          @db.Decimal(12, 2)
-  totalReturnPct  Decimal?          @db.Decimal(8, 4)
-  assets          Json?
-  isActive        Boolean           @default(true)
-  canWithdraw     Boolean           @default(true)
-  lockupEnd       DateTime?
-  positionData    Json?
-  lastYieldClaim  DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  wallet          CryptoWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id                    String            @id @default(cuid())
+  walletId              String
+  protocolName          String
+  protocolType          String
+  contractAddress       String
+  network               BlockchainNetwork
+  positionType          String
+  poolName              String?
+  totalValueUsd         Decimal           @db.Decimal(12, 2)
+  principalUsd          Decimal?          @db.Decimal(12, 2)
+  yieldEarned           Decimal?          @db.Decimal(12, 2)
+  yieldEarnedUsd        Decimal?          @db.Decimal(12, 2)
+  apr                   Decimal?          @db.Decimal(8, 4)
+  apy                   Decimal?          @db.Decimal(8, 4)
+  dailyYield            Decimal?          @db.Decimal(12, 2)
+  totalReturn           Decimal?          @db.Decimal(12, 2)
+  totalReturnPct        Decimal?          @db.Decimal(8, 4)
+  assets                Json?
+  isActive              Boolean           @default(true)
+  canWithdraw           Boolean           @default(true)
+  lockupEnd             DateTime?
+  positionData          Json?
+  lastYieldClaim        DateTime?
+
+  // Zapper Integration Fields
+  zapperAppId           String?
+  zapperGroupId         String?
+  zapperPositionAddress String?
+  metaType              String?           // SUPPLIED, BORROWED, CLAIMABLE, etc.
+  underlyingTokens      Json?             // Detailed token breakdown
+  displayProps          Json?             // Display properties from Zapper
+  syncSource            String            @default("zapper")
+  externalPositionId    String?           // Unique identifier from external source
+  lastSyncAt            DateTime?         @default(now())
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  wallet                CryptoWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@index([walletId])
   @@index([protocolName])
   @@index([positionType])
+  @@index([zapperAppId])
+  @@index([metaType])
+  @@index([syncSource])
+  @@index([lastSyncAt])
+  @@unique([walletId, contractAddress, network, syncSource])
   @@map("defi_positions")
 }
 

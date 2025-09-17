@@ -1189,7 +1189,7 @@ export class CryptoController {
 
       // Get user's wallets to track
       const wallets = await cryptoService.getUserWallets(userId);
-      const walletIds = wallets.map(wallet => wallet.id);
+      const walletIds = wallets.map((wallet) => wallet.id);
 
       // Setup SSE connection for this user
       const connected = userSyncProgressManager.addUserConnection(userId, res, walletIds);
@@ -1224,7 +1224,7 @@ export class CryptoController {
         res.json({
           success: true,
           data: { wallets: {} },
-          message: 'No wallets found'
+          message: 'No wallets found',
         });
         return;
       }
@@ -1246,8 +1246,8 @@ export class CryptoController {
               status: 'completed',
               progress: 100,
               lastSyncAt: wallet.updatedAt,
-              syncedData: ['assets']
-            }
+              syncedData: ['assets'],
+            },
           };
         } catch (error) {
           logger.warn(`Failed to get sync status for wallet ${wallet.id}:`, error);
@@ -1259,8 +1259,8 @@ export class CryptoController {
             syncStatus: {
               status: 'error',
               progress: 0,
-              error: 'Failed to get sync status'
-            }
+              error: 'Failed to get sync status',
+            },
           };
         }
       }
@@ -1270,11 +1270,11 @@ export class CryptoController {
         data: {
           wallets: walletStatuses,
           totalWallets: wallets.length,
-          syncingCount: Object.values(walletStatuses).filter(w =>
-            w.syncStatus.status === 'syncing' || w.syncStatus.status === 'queued'
-          ).length
+          syncingCount: Object.values(walletStatuses).filter(
+            (w) => w.syncStatus.status === 'syncing' || w.syncStatus.status === 'queued'
+          ).length,
         },
-        message: 'Batch sync status retrieved successfully'
+        message: 'Batch sync status retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
@@ -1302,7 +1302,7 @@ export class CryptoController {
 
       // Get connection stats from progress manager
       const stats = userSyncProgressManager.getStats();
-      const userConnection = stats.connections.find(conn => conn.userId === userId);
+      const userConnection = stats.connections.find((conn) => conn.userId === userId);
 
       res.json({
         success: true,
@@ -1311,16 +1311,15 @@ export class CryptoController {
           connectionInfo: userConnection || null,
           systemStats: {
             totalConnections: stats.totalConnections,
-            isHealthy: userSyncProgressManager.isHealthy()
-          }
+            isHealthy: userSyncProgressManager.isHealthy(),
+          },
         },
-        message: 'Sync progress stats retrieved successfully'
+        message: 'Sync progress stats retrieved successfully',
       });
     } catch (error) {
       this.handleError(error, res);
     }
   }
-
 
   async getDeFiAnalytics(req: Request, res: Response) {
     try {
@@ -1349,7 +1348,6 @@ export class CryptoController {
         data: analytics,
         message: 'DeFi analytics retrieved successfully',
       });
-
     } catch (error) {
       this.handleError(error, res);
     }
@@ -1417,7 +1415,6 @@ export class CryptoController {
         },
         message: 'DeFi sync job initiated successfully',
       });
-
     } catch (error) {
       this.handleError(error, res);
     }
@@ -1473,7 +1470,6 @@ export class CryptoController {
         data: updatedPosition,
         message: 'Position metrics updated successfully',
       });
-
     } catch (error) {
       this.handleError(error, res);
     }
@@ -1482,7 +1478,6 @@ export class CryptoController {
   // ===============================
   // PRIVATE HELPER METHODS
   // ===============================
-
 
   private handleError(error: any, res: Response) {
     // Handle CryptoServiceError

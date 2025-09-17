@@ -208,7 +208,9 @@ export const DeFiFiltersSchema = z.object({
 
   network: BlockchainNetworkSchema.optional(),
 
-  metaType: z.enum(['SUPPLIED', 'BORROWED', 'CLAIMABLE', 'VESTING', 'LOCKED', 'NFT', 'WALLET']).optional(),
+  metaType: z
+    .enum(['SUPPLIED', 'BORROWED', 'CLAIMABLE', 'VESTING', 'LOCKED', 'NFT', 'WALLET'])
+    .optional(),
 
   isActive: z.coerce.boolean().optional(),
 
@@ -253,7 +255,6 @@ export const GetWalletNFTsQuerySchema = z.object({
   isSpam: z.coerce.boolean().optional(),
   search: z.string().min(1).max(100).trim().optional(),
 });
-
 
 // ===============================
 // PORTFOLIO SCHEMAS
@@ -519,7 +520,9 @@ export const GetWalletDeFiQuerySchema = z.object({
   protocolType: z.string().trim().optional(),
   positionType: z.string().trim().optional(),
   network: z.string().trim().optional(),
-  metaType: z.enum(['SUPPLIED', 'BORROWED', 'CLAIMABLE', 'VESTING', 'LOCKED', 'NFT', 'WALLET']).optional(),
+  metaType: z
+    .enum(['SUPPLIED', 'BORROWED', 'CLAIMABLE', 'VESTING', 'LOCKED', 'NFT', 'WALLET'])
+    .optional(),
   isActive: z.coerce.boolean().optional(),
   minValueUsd: z.coerce.number().min(0).optional(),
   maxValueUsd: z.coerce.number().min(0).optional(),

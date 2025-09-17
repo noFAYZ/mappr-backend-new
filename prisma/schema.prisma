@@ -368,7 +368,7 @@ model CryptoPosition {
   id               String        @id @default(cuid())
   walletId         String
   assetId          String?
-  balance          Decimal       @db.Decimal(28, 18)
+  balance          Decimal       @db.Decimal(38, 18)
   balanceFormatted String
   balanceUsd       Decimal       @db.Decimal(12, 2)
   avgCostPrice     Decimal?      @db.Decimal(18, 8)
@@ -387,6 +387,7 @@ model CryptoPosition {
 
   @@index([walletId])
   @@index([balanceUsd])
+  @@unique([walletId, assetId], map: "walletId_assetId")
   @@map("crypto_positions")
 }
 
@@ -402,7 +403,7 @@ model CryptoTransaction {
   timestamp            DateTime
   fromAddress          String
   toAddress            String
-  value                Decimal           @db.Decimal(28, 18)
+  value                Decimal           @db.Decimal(38, 18)
   valueFormatted       String
   valueUsd             Decimal?          @db.Decimal(12, 2)
   gasUsed              BigInt?
@@ -504,9 +505,10 @@ model DeFiPosition {
   zapperAppId           String?
   zapperGroupId         String?
   zapperPositionAddress String?
+  appImageUrl           String?           // Protocol/app image URL
   metaType              String?           // SUPPLIED, BORROWED, CLAIMABLE, etc.
-  underlyingTokens      Json?             // Detailed token breakdown
-  displayProps          Json?             // Display properties from Zapper
+  underlyingTokens      Json?             // Detailed token breakdown with images
+  displayProps          Json?             // Comprehensive display properties from Zapper
   syncSource            String            @default("zapper")
   externalPositionId    String?           // Unique identifier from external source
   lastSyncAt            DateTime?         @default(now())

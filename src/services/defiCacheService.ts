@@ -46,7 +46,6 @@ export class DeFiCacheService {
       this.redis.on('close', () => {
         logger.warn('DeFi cache Redis connection closed');
       });
-
     } catch (error) {
       logger.error('Failed to initialize DeFi cache service:', error);
       this.redis = null;
@@ -79,7 +78,6 @@ export class DeFiCacheService {
         ttl,
         key,
       });
-
     } catch (error) {
       logger.warn('Failed to cache DeFi positions:', error);
       // Don't throw - continue without cache
@@ -110,7 +108,6 @@ export class DeFiCacheService {
       });
 
       return positions;
-
     } catch (error) {
       logger.warn('Failed to get cached DeFi positions:', error);
       return null;
@@ -133,7 +130,7 @@ export class DeFiCacheService {
 
     try {
       const key = this.getKey(`analytics:${walletId}`, options?.prefix);
-      const ttl = options?.ttl || (this.defaultTTL * 2); // Longer TTL for analytics
+      const ttl = options?.ttl || this.defaultTTL * 2; // Longer TTL for analytics
 
       await this.redis.setex(key, ttl, JSON.stringify(analytics));
 
@@ -143,7 +140,6 @@ export class DeFiCacheService {
         ttl,
         key,
       });
-
     } catch (error) {
       logger.warn('Failed to cache DeFi analytics:', error);
       // Don't throw - continue without cache
@@ -174,7 +170,6 @@ export class DeFiCacheService {
       });
 
       return analytics;
-
     } catch (error) {
       logger.warn('Failed to get cached DeFi analytics:', error);
       return null;
@@ -203,7 +198,7 @@ export class DeFiCacheService {
 
     try {
       const key = this.getKey(`protocol:${protocolName}:${network}`, options?.prefix);
-      const ttl = options?.ttl || (this.defaultTTL * 4); // Longer TTL for protocol data
+      const ttl = options?.ttl || this.defaultTTL * 4; // Longer TTL for protocol data
 
       await this.redis.setex(key, ttl, JSON.stringify(metrics));
 
@@ -214,7 +209,6 @@ export class DeFiCacheService {
         ttl,
         key,
       });
-
     } catch (error) {
       logger.warn('Failed to cache protocol metrics:', error);
       // Don't throw - continue without cache
@@ -246,7 +240,6 @@ export class DeFiCacheService {
       });
 
       return metrics;
-
     } catch (error) {
       logger.warn('Failed to get cached protocol metrics:', error);
       return null;
@@ -270,7 +263,7 @@ export class DeFiCacheService {
 
     try {
       const key = this.getKey(`zapper:${walletAddress}:${network}`, options?.prefix);
-      const ttl = options?.ttl || (this.defaultTTL / 2); // Shorter TTL for API responses
+      const ttl = options?.ttl || this.defaultTTL / 2; // Shorter TTL for API responses
 
       await this.redis.setex(key, ttl, JSON.stringify(response));
 
@@ -280,7 +273,6 @@ export class DeFiCacheService {
         ttl,
         key,
       });
-
     } catch (error) {
       logger.warn('Failed to cache Zapper response:', error);
       // Don't throw - continue without cache
@@ -312,7 +304,6 @@ export class DeFiCacheService {
       });
 
       return response;
-
     } catch (error) {
       logger.warn('Failed to get cached Zapper response:', error);
       return null;
@@ -340,7 +331,6 @@ export class DeFiCacheService {
           keysCleared: keys.length,
         });
       }
-
     } catch (error) {
       logger.warn('Failed to clear wallet cache:', error);
       // Don't throw - continue without cache
@@ -364,7 +354,6 @@ export class DeFiCacheService {
           keysCleared: keys.length,
         });
       }
-
     } catch (error) {
       logger.warn('Failed to clear protocol cache:', error);
       // Don't throw - continue without cache
@@ -403,7 +392,6 @@ export class DeFiCacheService {
       }
 
       return stats;
-
     } catch (error) {
       logger.warn('Failed to get cache stats:', error);
       return { connected: false };

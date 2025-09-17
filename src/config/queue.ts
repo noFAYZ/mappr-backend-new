@@ -23,13 +23,19 @@ const getConnectionConfig = (): ConnectionOptions | null => {
     port: Number(redisPort) || 6379,
     password: redisPassword,
     maxRetriesPerRequest: 3,
-    retryDelayOnFailover: 100,
     enableOfflineQueue: false,
     connectTimeout: 60000,
     lazyConnect: true,
     // Enhanced connection settings for better reliability
     keepAlive: 30000,
     commandTimeout: 5000,
+    // Optimize connection pooling to prevent exhaustion
+    family: 4,
+    maxLoadingTimeout: 5000,
+    enableReadyCheck: true,
+    enableAutoPipelining: true,
+    // Reduce connection count to prevent Redis client limit issues
+    db: 0,
   } as any;
 
   // Use Redis URL if provided, otherwise use individual parameters

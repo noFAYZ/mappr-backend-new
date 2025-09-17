@@ -6,7 +6,11 @@ import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { BlockchainNetwork, DeFiPosition } from '@prisma/client';
 import { parseAppBalances } from '@/utils/zapper/appBalanceParser';
-import { zapperDeFiMapper, DeFiPositionCreateInput, DeFiPortfolioSummary } from '@/utils/defi/zapperMapper';
+import {
+  zapperDeFiMapper,
+  DeFiPositionCreateInput,
+  DeFiPortfolioSummary,
+} from '@/utils/defi/zapperMapper';
 import { GraphQLResponse } from '@/utils/zapper/appBalanceParser';
 
 export interface DeFiPositionFilters {
@@ -50,21 +54,23 @@ export interface DeFiAnalytics {
       balanceUsd: number;
     }>;
   }>;
-  protocolBreakdown: Record<string, {
-    totalValueUsd: number;
-    positionCount: number;
-    avgAPY?: number;
-  }>;
+  protocolBreakdown: Record<
+    string,
+    {
+      totalValueUsd: number;
+      positionCount: number;
+      avgAPY?: number;
+    }
+  >;
   riskMetrics: {
     diversificationScore: number; // 0-100
-    protocolRiskScore: number;    // 0-100
-    liquidityScore: number;       // 0-100
-    overallRiskScore: number;     // 0-100
+    protocolRiskScore: number; // 0-100
+    liquidityScore: number; // 0-100
+    overallRiskScore: number; // 0-100
   };
 }
 
 export class DeFiPositionService {
-
   /**
    * Sync DeFi positions for a wallet from Zapper data
    */
@@ -80,7 +86,8 @@ export class DeFiPositionService {
       const positionsToSync: DeFiPositionCreateInput[] = [];
 
       for (const app of parsedData.apps) {
-        if (app.balanceUSD > 0) { // Only sync positions with value
+        if (app.balanceUSD > 0) {
+          // Only sync positions with value
           const appPositions = zapperDeFiMapper.mapParsedAppToPositions(walletId, app);
           positionsToSync.push(...appPositions);
         }
@@ -96,16 +103,12 @@ export class DeFiPositionService {
       });
 
       return syncedPositions;
-
     } catch (error) {
       logger.error('Failed to sync DeFi positions', {
         walletId,
         error: error instanceof Error ? error.message : String(error),
       });
-      throw new AppError(
-        'Failed to sync DeFi positions',
-        500
-      );
+      throw new AppError('Failed to sync DeFi positions', 500);
     }
   }
 
@@ -116,7 +119,6 @@ export class DeFiPositionService {
     walletId: string,
     positions: DeFiPositionCreateInput[]
   ): Promise<DeFiPosition[]> {
-
     return await prisma.$transaction(async (tx) => {
       const upsertedPositions: DeFiPosition[] = [];
 
@@ -124,12 +126,12 @@ export class DeFiPositionService {
       await tx.deFiPosition.updateMany({
         where: {
           walletId,
-          syncSource: 'zapper'
+          syncSource: 'zapper',
         },
         data: {
           isActive: false,
-          lastSyncAt: new Date()
-        }
+          lastSyncAt: new Date(),
+        },
       });
 
       // Upsert new/updated positions
@@ -140,16 +142,16 @@ export class DeFiPositionService {
               walletId: position.walletId,
               contractAddress: position.contractAddress,
               network: position.network,
-              syncSource: 'zapper'
-            }
+              syncSource: 'zapper',
+            },
           },
           update: {
             ...position,
             isActive: true,
             lastSyncAt: new Date(),
-            updatedAt: new Date()
+            updatedAt: new Date(),
           },
-          create: position
+          create: position,
         });
 
         upsertedPositions.push(upserted);
@@ -164,9 +166,9 @@ export class DeFiPositionService {
           syncSource: 'zapper',
           isActive: false,
           lastSyncAt: {
-            lt: staleCutoff
-          }
-        }
+            lt: staleCutoff,
+          },
+        },
       });
 
       logger.info('DeFi positions batch upsert completed', {
@@ -192,8 +194,8 @@ export class DeFiPositionService {
       const wallet = await prisma.cryptoWallet.findFirst({
         where: {
           id: walletId,
-          userId
-        }
+          userId,
+        },
       });
 
       if (!wallet) {
@@ -210,10 +212,10 @@ export class DeFiPositionService {
         ...(filters.metaType && { metaType: filters.metaType }),
         ...(filters.isActive !== undefined && { isActive: filters.isActive }),
         ...(filters.minValueUsd && {
-          totalValueUsd: { gte: filters.minValueUsd }
+          totalValueUsd: { gte: filters.minValueUsd },
         }),
         ...(filters.maxValueUsd && {
-          totalValueUsd: { lte: filters.maxValueUsd }
+          totalValueUsd: { lte: filters.maxValueUsd },
         }),
       };
 
@@ -221,7 +223,7 @@ export class DeFiPositionService {
       if (filters.minValueUsd && filters.maxValueUsd) {
         where.totalValueUsd = {
           gte: filters.minValueUsd,
-          lte: filters.maxValueUsd
+          lte: filters.maxValueUsd,
         };
       }
 
@@ -233,18 +235,14 @@ export class DeFiPositionService {
               id: true,
               address: true,
               name: true,
-              network: true
-            }
-          }
+              network: true,
+            },
+          },
         },
-        orderBy: [
-          { totalValueUsd: 'desc' },
-          { createdAt: 'desc' }
-        ]
+        orderBy: [{ totalValueUsd: 'desc' }, { createdAt: 'desc' }],
       });
 
       return positions;
-
     } catch (error) {
       if (error instanceof AppError) throw error;
 
@@ -255,20 +253,14 @@ export class DeFiPositionService {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      throw new AppError(
-        'Failed to fetch DeFi positions',
-        500
-      );
+      throw new AppError('Failed to fetch DeFi positions', 500);
     }
   }
 
   /**
    * Get DeFi analytics for a wallet
    */
-  async getDeFiAnalytics(
-    userId: string,
-    walletId: string
-  ): Promise<DeFiAnalytics> {
+  async getDeFiAnalytics(userId: string, walletId: string): Promise<DeFiAnalytics> {
     try {
       // Get all positions for the wallet
       const positions = await this.getWalletDeFiPositions(userId, walletId);
@@ -279,13 +271,16 @@ export class DeFiPositionService {
 
       // Calculate summary metrics
       const totalValueUsd = positions.reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0);
-      const totalYieldEarned = positions.reduce((sum, pos) => sum + Number(pos.yieldEarnedUsd || 0), 0);
-      const activePositions = positions.filter(pos => pos.isActive).length;
-      const protocolCount = new Set(positions.map(pos => pos.protocolName)).size;
+      const totalYieldEarned = positions.reduce(
+        (sum, pos) => sum + Number(pos.yieldEarnedUsd || 0),
+        0
+      );
+      const activePositions = positions.filter((pos) => pos.isActive).length;
+      const protocolCount = new Set(positions.map((pos) => pos.protocolName)).size;
 
       // Calculate weighted average APY
       const avgAPY = this.calculateWeightedAverage(
-        positions.filter(pos => pos.apy),
+        positions.filter((pos) => pos.apy),
         'apy',
         'totalValueUsd'
       );
@@ -294,7 +289,7 @@ export class DeFiPositionService {
       const positionsByType = this.groupByAndCount(positions, 'positionType');
       const positionsByProtocol = this.groupByAndCount(positions, 'protocolName');
       const positionsByMetaType = this.groupByAndCount(
-        positions.filter(pos => pos.metaType),
+        positions.filter((pos) => pos.metaType),
         'metaType'
       );
 
@@ -306,31 +301,44 @@ export class DeFiPositionService {
 
       // Extract claimable rewards (simplified)
       const claimableRewards = positions
-        .filter(pos => pos.metaType === 'CLAIMABLE')
-        .map(pos => ({
+        .filter((pos) => pos.metaType === 'CLAIMABLE')
+        .map((pos) => ({
           protocolName: pos.protocolName,
           amount: Number(pos.yieldEarned || 0),
           amountUsd: Number(pos.totalValueUsd),
           token: {
-            symbol: (pos.assets && typeof pos.assets === 'object' && 'tokens' in pos.assets && Array.isArray(pos.assets['tokens']) && pos.assets['tokens'][0] && typeof pos.assets['tokens'][0] === 'object' && 'symbol' in pos.assets['tokens'][0]) ? String(pos.assets['tokens'][0]['symbol']) : 'UNKNOWN',
-            address: pos.contractAddress
-          }
+            symbol:
+              pos.assets &&
+              typeof pos.assets === 'object' &&
+              'tokens' in pos.assets &&
+              Array.isArray(pos.assets['tokens']) &&
+              pos.assets['tokens'][0] &&
+              typeof pos.assets['tokens'][0] === 'object' &&
+              'symbol' in pos.assets['tokens'][0]
+                ? String(pos.assets['tokens'][0]['symbol'])
+                : 'UNKNOWN',
+            address: pos.contractAddress,
+          },
         }));
 
       // Extract LP positions (simplified)
       const lpPositions = positions
-        .filter(pos => pos.positionType === 'LP_TOKEN')
-        .map(pos => ({
+        .filter((pos) => pos.positionType === 'LP_TOKEN')
+        .map((pos) => ({
           protocolName: pos.protocolName,
           poolName: pos.poolName || 'Unknown Pool',
           totalValueUsd: Number(pos.totalValueUsd),
-          tokens: (pos.assets && typeof pos.assets === 'object' && 'tokens' in pos.assets && Array.isArray(pos.assets['tokens']))
-            ? pos.assets['tokens'].map((token: any) => ({
-                symbol: token.symbol,
-                balance: token.balance,
-                balanceUsd: token.balanceUSD
-              }))
-            : []
+          tokens:
+            pos.assets &&
+            typeof pos.assets === 'object' &&
+            'tokens' in pos.assets &&
+            Array.isArray(pos.assets['tokens'])
+              ? pos.assets['tokens'].map((token: any) => ({
+                  symbol: token.symbol,
+                  balance: token.balance,
+                  balanceUsd: token.balanceUSD,
+                }))
+              : [],
         }));
 
       const summary: DeFiPortfolioSummary = {
@@ -357,7 +365,6 @@ export class DeFiPositionService {
         protocolBreakdown,
         riskMetrics,
       };
-
     } catch (error) {
       if (error instanceof AppError) throw error;
 
@@ -367,10 +374,7 @@ export class DeFiPositionService {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      throw new AppError(
-        'Failed to calculate DeFi analytics',
-        500
-      );
+      throw new AppError('Failed to calculate DeFi analytics', 500);
     }
   }
 
@@ -392,9 +396,9 @@ export class DeFiPositionService {
         where: {
           id: positionId,
           wallet: {
-            userId
-          }
-        }
+            userId,
+          },
+        },
       });
 
       if (!position) {
@@ -405,8 +409,8 @@ export class DeFiPositionService {
         where: { id: positionId },
         data: {
           ...updates,
-          updatedAt: new Date()
-        }
+          updatedAt: new Date(),
+        },
       });
 
       logger.info('Position metrics updated', {
@@ -416,7 +420,6 @@ export class DeFiPositionService {
       });
 
       return updated;
-
     } catch (error) {
       if (error instanceof AppError) throw error;
 
@@ -427,10 +430,7 @@ export class DeFiPositionService {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      throw new AppError(
-        'Failed to update position metrics',
-        500
-      );
+      throw new AppError('Failed to update position metrics', 500);
     }
   }
 
@@ -482,7 +482,7 @@ export class DeFiPositionService {
     const weightedSum = positions.reduce((sum, pos) => {
       const value = Number(pos[field] || 0);
       const weight = Number(pos[weightField] || 0);
-      return sum + (value * weight);
+      return sum + value * weight;
     }, 0);
 
     return weightedSum / totalWeight;
@@ -492,11 +492,14 @@ export class DeFiPositionService {
     positions: DeFiPosition[],
     field: keyof DeFiPosition
   ): Record<string, number> {
-    return positions.reduce((acc, pos) => {
-      const key = String(pos[field] || 'Unknown');
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    return positions.reduce(
+      (acc, pos) => {
+        const key = String(pos[field] || 'Unknown');
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
   }
 
   private calculateProtocolBreakdown(positions: DeFiPosition[]): Record<string, any> {
@@ -522,11 +525,12 @@ export class DeFiPositionService {
     }
 
     // Calculate average APY for each protocol
-    Object.keys(breakdown).forEach(protocol => {
+    Object.keys(breakdown).forEach((protocol) => {
       const apyValues = breakdown[protocol].apyValues;
-      breakdown[protocol].avgAPY = apyValues.length > 0
-        ? apyValues.reduce((sum: number, apy: number) => sum + apy, 0) / apyValues.length
-        : undefined;
+      breakdown[protocol].avgAPY =
+        apyValues.length > 0
+          ? apyValues.reduce((sum: number, apy: number) => sum + apy, 0) / apyValues.length
+          : undefined;
       delete breakdown[protocol].apyValues;
     });
 
@@ -546,9 +550,9 @@ export class DeFiPositionService {
     }
 
     // Diversification score based on protocol distribution
-    const protocolValues = Object.values(
-      this.calculateProtocolBreakdown(positions)
-    ).map((breakdown: any) => breakdown.totalValueUsd);
+    const protocolValues = Object.values(this.calculateProtocolBreakdown(positions)).map(
+      (breakdown: any) => breakdown.totalValueUsd
+    );
 
     const diversificationScore = this.calculateHerfindahlIndex(protocolValues, totalValue);
 
@@ -559,11 +563,8 @@ export class DeFiPositionService {
     const liquidityScore = this.calculateLiquidityScore(positions);
 
     // Overall risk score (weighted average)
-    const overallRiskScore = (
-      diversificationScore * 0.4 +
-      protocolRiskScore * 0.4 +
-      liquidityScore * 0.2
-    );
+    const overallRiskScore =
+      diversificationScore * 0.4 + protocolRiskScore * 0.4 + liquidityScore * 0.2;
 
     return {
       diversificationScore: Math.round(diversificationScore),
@@ -576,7 +577,7 @@ export class DeFiPositionService {
   private calculateHerfindahlIndex(values: number[], total: number): number {
     const hhi = values.reduce((sum, value) => {
       const share = value / total;
-      return sum + (share * share);
+      return sum + share * share;
     }, 0);
 
     // Convert to diversification score (inverse of HHI, scaled 0-100)
@@ -586,14 +587,14 @@ export class DeFiPositionService {
   private calculateProtocolRisk(positions: DeFiPosition[]): number {
     // Simplified protocol risk scoring
     const riskScores: Record<string, number> = {
-      'AAVE': 20,
-      'Compound': 25,
-      'Uniswap': 30,
-      'Curve': 35,
-      'SushiSwap': 40,
-      'PancakeSwap': 45,
+      AAVE: 20,
+      Compound: 25,
+      Uniswap: 30,
+      Curve: 35,
+      SushiSwap: 40,
+      PancakeSwap: 45,
       // Default for unknown protocols
-      'Unknown': 70,
+      Unknown: 70,
     };
 
     const totalValue = positions.reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0);
@@ -603,7 +604,7 @@ export class DeFiPositionService {
     const weightedRisk = positions.reduce((sum, pos) => {
       const protocolRisk = riskScores[pos.protocolName] || riskScores['Unknown'] || 50;
       const weight = Number(pos.totalValueUsd) / totalValue;
-      return sum + (protocolRisk * weight);
+      return sum + protocolRisk * weight;
     }, 0);
 
     return 100 - weightedRisk; // Invert so higher score = lower risk
@@ -612,10 +613,10 @@ export class DeFiPositionService {
   private calculateLiquidityScore(positions: DeFiPosition[]): number {
     // Simplified liquidity scoring based on position types
     const liquidityScores: Record<string, number> = {
-      'LP_TOKEN': 60,      // Moderate liquidity
-      'CONTRACT_POSITION': 80, // Good liquidity
-      'NFT_POSITION': 20,  // Low liquidity
-      'OTHER': 50,         // Unknown liquidity
+      LP_TOKEN: 60, // Moderate liquidity
+      CONTRACT_POSITION: 80, // Good liquidity
+      NFT_POSITION: 20, // Low liquidity
+      OTHER: 50, // Unknown liquidity
     };
 
     const totalValue = positions.reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0);
@@ -625,7 +626,7 @@ export class DeFiPositionService {
     const weightedLiquidity = positions.reduce((sum, pos) => {
       const liquidityScore = liquidityScores[pos.positionType] || liquidityScores['OTHER'] || 50;
       const weight = Number(pos.totalValueUsd) / totalValue;
-      return sum + (liquidityScore * weight);
+      return sum + liquidityScore * weight;
     }, 0);
 
     return weightedLiquidity;
@@ -633,13 +634,13 @@ export class DeFiPositionService {
 
   private calculateSuppliedValue(positions: DeFiPosition[]): number {
     return positions
-      .filter(pos => pos.metaType === 'SUPPLIED')
+      .filter((pos) => pos.metaType === 'SUPPLIED')
       .reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0);
   }
 
   private calculateBorrowedValue(positions: DeFiPosition[]): number {
     return positions
-      .filter(pos => pos.metaType === 'BORROWED')
+      .filter((pos) => pos.metaType === 'BORROWED')
       .reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0);
   }
 

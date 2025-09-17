@@ -2,7 +2,15 @@
  * ZapperDeFiMapper - Transform Zapper parsed data to DeFi position database format
  */
 import { BlockchainNetwork } from '@prisma/client';
-import { ParsedApp, ParsedPosition, ParsedAppBalances, NetworkObject } from '@/utils/zapper/appBalanceParser';
+import {
+  ParsedApp,
+  ParsedPosition,
+  ParsedAppBalances,
+  NetworkObject,
+  ParsedToken,
+  ContractToken,
+  ContractPosition,
+} from '@/utils/zapper/appBalanceParser';
 
 export interface DeFiPositionCreateInput {
   walletId: string;
@@ -32,6 +40,7 @@ export interface DeFiPositionCreateInput {
   zapperAppId?: string;
   zapperGroupId?: string;
   zapperPositionAddress?: string;
+  appImageUrl?: string;
   metaType?: string;
   underlyingTokens?: any;
   displayProps?: any;
@@ -58,14 +67,10 @@ export interface DeFiPortfolioSummary {
 }
 
 export class ZapperDeFiMapper {
-
   /**
    * Maps a ParsedApp and its positions to DeFiPosition database records
    */
-  mapParsedAppToPositions(
-    walletId: string,
-    app: ParsedApp
-  ): DeFiPositionCreateInput[] {
+  mapParsedAppToPositions(walletId: string, app: ParsedApp): DeFiPositionCreateInput[] {
     const positions: DeFiPositionCreateInput[] = [];
 
     for (const position of app.positions) {
@@ -84,7 +89,6 @@ export class ZapperDeFiMapper {
     app: ParsedApp,
     position: ParsedPosition
   ): DeFiPositionCreateInput {
-
     const protocolType = this.inferProtocolType(app.category, position.positionType);
     const positionType = this.mapPositionType(position.positionType);
     const poolName = this.extractPoolName(position);
@@ -107,6 +111,9 @@ export class ZapperDeFiMapper {
     // Add optional fields only if they have valid values
     if (poolName) data.poolName = poolName;
     if (metaType) data.metaType = metaType;
+
+    // Add app image URL if available
+    if (app.imgUrl) data.appImageUrl = app.imgUrl;
 
     const principalUsd = this.calculatePrincipal(position);
     if (principalUsd !== null) data.principalUsd = principalUsd;
@@ -236,7 +243,7 @@ export class ZapperDeFiMapper {
   private extractMetaType(position: ParsedPosition): string | undefined {
     if (position.positionType === 'contract-position') {
       // Get the most common meta type from tokens
-      const metaTypes = position.tokens.map(token => token.metaType);
+      const metaTypes = position.tokens.map((token: ContractToken) => token.metaType);
       const mostCommon = this.getMostCommonValue(metaTypes);
       return mostCommon;
     }
@@ -252,23 +259,36 @@ export class ZapperDeFiMapper {
 
     // Map based on chain ID first (most reliable)
     switch (network.chainId) {
-      case 1: return BlockchainNetwork.ETHEREUM;
-      case 137: return BlockchainNetwork.POLYGON;
-      case 56: return BlockchainNetwork.BSC;
-      case 42161: return BlockchainNetwork.ARBITRUM;
-      case 10: return BlockchainNetwork.OPTIMISM;
-      case 43114: return BlockchainNetwork.AVALANCHE;
-      case 8453: return BlockchainNetwork.BASE;
-      case 250: return BlockchainNetwork.FANTOM;
-      case 25: return BlockchainNetwork.CRONOS;
-      case 100: return BlockchainNetwork.GNOSIS;
-      case 1313161554: return BlockchainNetwork.AURORA;
-      case 42220: return BlockchainNetwork.CELO;
+      case 1:
+        return BlockchainNetwork.ETHEREUM;
+      case 137:
+        return BlockchainNetwork.POLYGON;
+      case 56:
+        return BlockchainNetwork.BSC;
+      case 42161:
+        return BlockchainNetwork.ARBITRUM;
+      case 10:
+        return BlockchainNetwork.OPTIMISM;
+      case 43114:
+        return BlockchainNetwork.AVALANCHE;
+      case 8453:
+        return BlockchainNetwork.BASE;
+      case 250:
+        return BlockchainNetwork.FANTOM;
+      case 25:
+        return BlockchainNetwork.CRONOS;
+      case 100:
+        return BlockchainNetwork.GNOSIS;
+      case 1313161554:
+        return BlockchainNetwork.AURORA;
+      case 42220:
+        return BlockchainNetwork.CELO;
       default:
         // Fallback to name matching
         if (networkName.includes('ethereum')) return BlockchainNetwork.ETHEREUM;
         if (networkName.includes('polygon')) return BlockchainNetwork.POLYGON;
-        if (networkName.includes('binance') || networkName.includes('bsc')) return BlockchainNetwork.BSC;
+        if (networkName.includes('binance') || networkName.includes('bsc'))
+          return BlockchainNetwork.BSC;
         if (networkName.includes('arbitrum')) return BlockchainNetwork.ARBITRUM;
         if (networkName.includes('optimism')) return BlockchainNetwork.OPTIMISM;
         if (networkName.includes('avalanche')) return BlockchainNetwork.AVALANCHE;
@@ -325,33 +345,78 @@ export class ZapperDeFiMapper {
   }
 
   /**
-   * Serialize assets for JSON storage
+   * Serialize assets for JSON storage with enhanced data including images
    */
   private serializeAssets(position: ParsedPosition): any {
     if (position.positionType === 'app-token') {
       return {
-        tokens: position.tokens.map(token => ({
+        positionType: 'app-token',
+        tokens: position.tokens.map((token: ParsedToken) => ({
           symbol: token.symbol,
+          name: (token as any).name || token.symbol,
           address: token.address,
           balance: token.balance,
           balanceUSD: token.balanceUSD,
           price: token.price,
+          decimals: token.decimals,
           network: token.network,
-        }))
+          imageUrl: (token as any).imageUrlV2 || (token as any).imageUrl,
+          ...((token as any).displayProps && { displayProps: (token as any).displayProps }),
+          ...((token as any).underlyingTokens && {
+            underlyingTokens: (token as any).underlyingTokens.map((ut: ParsedToken) => ({
+              symbol: ut.symbol,
+              name: (ut as any).name || ut.symbol,
+              address: ut.address,
+              balance: ut.balance,
+              balanceUSD: ut.balanceUSD,
+              price: ut.price,
+              decimals: ut.decimals,
+              imageUrl: (ut as any).imageUrlV2 || (ut as any).imageUrl,
+            })),
+          }),
+        })),
+        displayProps: this.extractDisplayPropsFromPosition(position),
+        metadata: this.extractPositionMetadata(position),
       };
     }
 
     if (position.positionType === 'contract-position') {
+      const contractPosition = position as ContractPosition;
       return {
-        tokens: position.tokens.map(token => ({
+        positionType: 'contract-position',
+        tokens: position.tokens.map((token: ContractToken) => ({
           symbol: token.symbol,
+          name: (token as any).name || token.symbol,
           address: token.address,
           balance: token.balance,
           balanceUSD: token.balanceUSD,
           price: token.price,
+          decimals: token.decimals,
           network: token.network,
           metaType: token.metaType,
-        }))
+          level: token.level,
+          type: token.type,
+          imageUrl: (token as any).imageUrlV2 || (token as any).imageUrl,
+          ...((token as any).displayProps && { displayProps: (token as any).displayProps }),
+          ...(token.underlyingTokens && {
+            underlyingTokens: token.underlyingTokens.map((ut: ParsedToken) => ({
+              symbol: ut.symbol,
+              name: (ut as any).name || ut.symbol,
+              address: ut.address,
+              balance: ut.balance,
+              balanceUSD: ut.balanceUSD,
+              price: ut.price,
+              decimals: ut.decimals,
+              imageUrl: (ut as any).imageUrlV2 || (ut as any).imageUrl,
+              level: (ut as any).level || 1,
+              type: (ut as any).type,
+              metaType: (ut as any).metaType,
+            })),
+          }),
+        })),
+        displayProps: contractPosition.displayProps || {},
+        metadata: this.extractPositionMetadata(position),
+        stats: this.extractPositionStats(position),
       };
     }
 
@@ -371,18 +436,52 @@ export class ZapperDeFiMapper {
    * Serialize complete position data
    */
   private serializePositionData(position: ParsedPosition): any {
-    return {
+    const baseData = {
       positionType: position.positionType,
       address: position.address,
       network: position.network,
       balanceUSD: position.balanceUSD,
+      type: position.type,
       ...('symbol' in position && { symbol: position.symbol }),
       ...('decimals' in position && { decimals: position.decimals }),
       ...('balance' in position && { balance: position.balance }),
       ...('price' in position && { price: position.price }),
-      ...('supply' in position && { supply: position.supply }),
-      ...('pricePerShare' in position && { pricePerShare: position.pricePerShare }),
     };
+
+    // Add app-token specific data
+    if (position.positionType === 'app-token') {
+      const appPosition = position as any;
+      return {
+        ...baseData,
+        ...(appPosition.appId && { appId: appPosition.appId }),
+        ...(appPosition.groupId && { groupId: appPosition.groupId }),
+        ...(appPosition.groupLabel && { groupLabel: appPosition.groupLabel }),
+        ...(appPosition.supply !== undefined && { supply: appPosition.supply }),
+        ...(appPosition.pricePerShare !== undefined && {
+          pricePerShare: appPosition.pricePerShare,
+        }),
+        tokenCount: appPosition.tokens?.length || 0,
+        totalUnderlyingValueUSD: this.calculateTotalUnderlyingValueUSD(appPosition.tokens || []),
+      };
+    }
+
+    // Add contract-position specific data
+    if (position.positionType === 'contract-position') {
+      const contractPosition = position as any;
+      return {
+        ...baseData,
+        ...(contractPosition.appId && { appId: contractPosition.appId }),
+        ...(contractPosition.groupId && { groupId: contractPosition.groupId }),
+        ...(contractPosition.groupLabel && { groupLabel: contractPosition.groupLabel }),
+        tokenCount: contractPosition.tokens?.length || 0,
+        totalUnderlyingValueUSD: this.calculateTotalUnderlyingValueUSD(
+          contractPosition.tokens || []
+        ),
+        metaTypeSummary: this.getMetaTypeSummary(contractPosition.tokens || []),
+      };
+    }
+
+    return baseData;
   }
 
   /**
@@ -396,7 +495,7 @@ export class ZapperDeFiMapper {
   }
 
   /**
-   * Serialize underlying tokens
+   * Serialize underlying tokens with enhanced data including images
    */
   private serializeUnderlyingTokens(position: ParsedPosition): any {
     // Only ContractPosition has tokens property
@@ -409,6 +508,7 @@ export class ZapperDeFiMapper {
 
     return tokens.map((token: any) => ({
       symbol: token.symbol,
+      name: token.name,
       address: token.address,
       balance: token.balance,
       balanceUSD: token.balanceUSD,
@@ -417,10 +517,25 @@ export class ZapperDeFiMapper {
       level: token.level,
       type: token.type,
       network: token.network,
-      ...('metaType' in token && { metaType: token.metaType }),
-      ...('underlyingTokens' in token && token.underlyingTokens && {
-        underlyingTokens: token.underlyingTokens
-      }),
+      imageUrl: (token as any).imageUrlV2 || token.imageUrl,
+      metaType: token.metaType,
+      ...((token as any).displayProps && { displayProps: (token as any).displayProps }),
+      ...('underlyingTokens' in token &&
+        token.underlyingTokens && {
+          underlyingTokens: token.underlyingTokens.map((ut: any) => ({
+            symbol: ut.symbol,
+            name: ut.name,
+            address: ut.address,
+            balance: ut.balance,
+            balanceUSD: ut.balanceUSD,
+            price: ut.price,
+            decimals: ut.decimals,
+            imageUrl: (ut as any).imageUrlV2 || ut.imageUrl,
+            level: ut.level,
+            type: ut.type,
+            metaType: ut.metaType,
+          })),
+        }),
     }));
   }
 
@@ -428,13 +543,33 @@ export class ZapperDeFiMapper {
    * Serialize display properties
    */
   private serializeDisplayProps(position: ParsedPosition): any {
-    // Only ContractPosition has displayProps property
-    if (position.positionType !== 'contract-position') {
-      return null;
+    if (position.positionType === 'contract-position') {
+      const contractPosition = position as any;
+      return {
+        ...contractPosition.displayProps,
+        positionType: 'contract-position',
+        tokenCount: contractPosition.tokens?.length || 0,
+        primaryTokens: this.extractPrimaryTokensForDisplay(contractPosition.tokens || []),
+        valueBreakdown: this.getValueBreakdownForDisplay(contractPosition.tokens || []),
+      };
     }
 
-    const contractPosition = position as any; // Type assertion since we checked positionType
-    return contractPosition.displayProps || {};
+    if (position.positionType === 'app-token') {
+      const appPosition = position as any;
+      return {
+        ...appPosition.displayProps,
+        positionType: 'app-token',
+        symbol: appPosition.symbol,
+        balance: appPosition.balance,
+        price: appPosition.price,
+        supply: appPosition.supply,
+        pricePerShare: appPosition.pricePerShare,
+        underlyingTokens: this.extractPrimaryTokensForDisplay(appPosition.tokens || []),
+        valueBreakdown: this.getValueBreakdownForDisplay(appPosition.tokens || []),
+      };
+    }
+
+    return null;
   }
 
   /**
@@ -449,15 +584,211 @@ export class ZapperDeFiMapper {
   }
 
   /**
+   * Extract display properties from position
+   */
+  private extractDisplayPropsFromPosition(position: ParsedPosition): any {
+    if (position.positionType === 'app-token') {
+      return {
+        label: (position as any).label || position.symbol,
+        symbol: position.symbol,
+        address: position.address,
+        ...(position.displayProps && { displayProps: position.displayProps }),
+      };
+    }
+    return {};
+  }
+
+  /**
+   * Extract position metadata
+   */
+  private extractPositionMetadata(position: ParsedPosition): any {
+    const metadata: any = {
+      positionType: position.positionType,
+      address: position.address,
+      network: position.network,
+      balanceUSD: position.balanceUSD,
+    };
+
+    // Add app-token specific metadata
+    if (position.positionType === 'app-token') {
+      metadata.symbol = position.symbol;
+      metadata.decimals = position.decimals;
+      metadata.balance = position.balance;
+      metadata.price = position.price;
+      if ('supply' in position) metadata.supply = position.supply;
+      if ('pricePerShare' in position) metadata.pricePerShare = position.pricePerShare;
+    }
+
+    // Add contract-position specific metadata
+    if (position.positionType === 'contract-position') {
+      const contractPosition = position as any;
+      metadata.groupId = contractPosition.groupId;
+      metadata.groupLabel = contractPosition.groupLabel;
+      metadata.tokensCount = position.tokens.length;
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Extract position statistics
+   */
+  private extractPositionStats(position: ParsedPosition): any {
+    if (position.positionType !== 'contract-position') {
+      return null;
+    }
+
+    const tokens = position.tokens;
+    const totalBalanceUSD = tokens.reduce(
+      (sum: number, token: ContractToken) => sum + token.balanceUSD,
+      0
+    );
+
+    const stats = {
+      totalTokens: tokens.length,
+      totalBalanceUSD,
+      averageBalanceUSD: totalBalanceUSD / tokens.length,
+      metaTypes: {} as Record<string, number>,
+      networks: {} as Record<string, number>,
+      levels: {} as Record<number, number>,
+    };
+
+    // Count meta types
+    tokens.forEach((token: ContractToken) => {
+      const metaType = token.metaType || 'unknown';
+      stats.metaTypes[metaType] = (stats.metaTypes[metaType] || 0) + 1;
+    });
+
+    // Count networks
+    tokens.forEach((token: ContractToken) => {
+      const network = token.network;
+      stats.networks[network] = (stats.networks[network] || 0) + 1;
+    });
+
+    // Count levels
+    tokens.forEach((token: ContractToken) => {
+      const level = token.level || 1;
+      stats.levels[level] = (stats.levels[level] || 0) + 1;
+    });
+
+    return stats;
+  }
+
+  /**
+   * Calculate total underlying value from token array
+   */
+  private calculateTotalUnderlyingValueUSD(tokens: any[]): number {
+    return tokens.reduce((total, token) => {
+      return total + (token.balanceUSD || 0);
+    }, 0);
+  }
+
+  /**
+   * Get meta type summary for contract position tokens
+   */
+  private getMetaTypeSummary(
+    tokens: any[]
+  ): Record<string, { count: number; totalValueUSD: number }> {
+    const summary: Record<string, { count: number; totalValueUSD: number }> = {};
+
+    tokens.forEach((token) => {
+      const metaType = token.metaType || 'UNKNOWN';
+      if (!summary[metaType]) {
+        summary[metaType] = { count: 0, totalValueUSD: 0 };
+      }
+      summary[metaType].count += 1;
+      summary[metaType].totalValueUSD += token.balanceUSD || 0;
+    });
+
+    return summary;
+  }
+
+  /**
+   * Extract primary tokens for display purposes (top tokens by value)
+   */
+  private extractPrimaryTokensForDisplay(tokens: any[]): any[] {
+    return tokens
+      .sort((a, b) => (b.balanceUSD || 0) - (a.balanceUSD || 0))
+      .slice(0, 5) // Top 5 tokens by value
+      .map((token) => ({
+        symbol: token.symbol,
+        name: token.name,
+        address: token.address,
+        balance: token.balance,
+        balanceUSD: token.balanceUSD,
+        price: token.price,
+        imageUrl: (token as any).imageUrlV2 || token.imageUrl,
+        metaType: token.metaType,
+        level: token.level,
+        type: token.type,
+      }));
+  }
+
+  /**
+   * Get value breakdown for display purposes
+   */
+  private getValueBreakdownForDisplay(tokens: any[]): any {
+    const totalValue = tokens.reduce((sum, token) => sum + (token.balanceUSD || 0), 0);
+
+    const breakdown = {
+      totalValueUSD: totalValue,
+      tokenCount: tokens.length,
+      byMetaType: {} as Record<string, { valueUSD: number; percentage: number; count: number }>,
+      bySymbol: {} as Record<string, { valueUSD: number; percentage: number; balance: number }>,
+    };
+
+    // Breakdown by meta type
+    tokens.forEach((token) => {
+      const metaType = token.metaType || 'UNKNOWN';
+      if (!breakdown.byMetaType[metaType]) {
+        breakdown.byMetaType[metaType] = { valueUSD: 0, percentage: 0, count: 0 };
+      }
+      breakdown.byMetaType[metaType].valueUSD += token.balanceUSD || 0;
+      breakdown.byMetaType[metaType].count += 1;
+    });
+
+    // Calculate percentages for meta types
+    Object.keys(breakdown.byMetaType).forEach((metaType) => {
+      const metaTypeData = breakdown.byMetaType[metaType];
+      if (metaTypeData) {
+        metaTypeData.percentage = totalValue > 0 ? (metaTypeData.valueUSD / totalValue) * 100 : 0;
+      }
+    });
+
+    // Breakdown by symbol (aggregate same symbols)
+    tokens.forEach((token) => {
+      const symbol = token.symbol;
+      if (!breakdown.bySymbol[symbol]) {
+        breakdown.bySymbol[symbol] = { valueUSD: 0, percentage: 0, balance: 0 };
+      }
+      breakdown.bySymbol[symbol].valueUSD += token.balanceUSD || 0;
+      breakdown.bySymbol[symbol].balance += token.balance || 0;
+    });
+
+    // Calculate percentages for symbols
+    Object.keys(breakdown.bySymbol).forEach((symbol) => {
+      const symbolData = breakdown.bySymbol[symbol];
+      if (symbolData) {
+        symbolData.percentage = totalValue > 0 ? (symbolData.valueUSD / totalValue) * 100 : 0;
+      }
+    });
+
+    return breakdown;
+  }
+
+  /**
    * Get most common value from array
    */
   private getMostCommonValue(array: (string | undefined)[]): string | undefined {
-    const counts = array.reduce((acc, val) => {
-      if (val) {
-        acc[val] = (acc[val] || 0) + 1;
-      }
-      return acc;
-    }, {} as Record<string, number>);
+    const counts = array.reduce(
+      (acc, val) => {
+        if (val) {
+          acc[val] = (acc[val] || 0) + 1;
+        }
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     let mostCommon: string | undefined;
     let maxCount = 0;
@@ -479,29 +810,37 @@ export class ZapperDeFiMapper {
     parsedData: ParsedAppBalances,
     existingPositions: DeFiPositionCreateInput[]
   ): DeFiPortfolioSummary {
+    const positionsByType = existingPositions.reduce(
+      (acc, pos) => {
+        acc[pos.positionType] = (acc[pos.positionType] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
-    const positionsByType = existingPositions.reduce((acc, pos) => {
-      acc[pos.positionType] = (acc[pos.positionType] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const positionsByProtocol = existingPositions.reduce(
+      (acc, pos) => {
+        acc[pos.protocolName] = (acc[pos.protocolName] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
-    const positionsByProtocol = existingPositions.reduce((acc, pos) => {
-      acc[pos.protocolName] = (acc[pos.protocolName] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const positionsByMetaType = existingPositions.reduce((acc, pos) => {
-      if (pos.metaType) {
-        acc[pos.metaType] = (acc[pos.metaType] || 0) + 1;
-      }
-      return acc;
-    }, {} as Record<string, number>);
+    const positionsByMetaType = existingPositions.reduce(
+      (acc, pos) => {
+        if (pos.metaType) {
+          acc[pos.metaType] = (acc[pos.metaType] || 0) + 1;
+        }
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     // Calculate weighted average APY
     const totalValue = existingPositions.reduce((sum, pos) => sum + pos.totalValueUsd, 0);
     const weightedAPY = existingPositions.reduce((sum, pos) => {
       if (pos.apy && pos.totalValueUsd > 0) {
-        return sum + (pos.apy * (pos.totalValueUsd / totalValue));
+        return sum + pos.apy * (pos.totalValueUsd / totalValue);
       }
       return sum;
     }, 0);
@@ -509,7 +848,7 @@ export class ZapperDeFiMapper {
     return {
       totalValueUsd: parsedData.totalBalanceUSD,
       totalYieldEarned: existingPositions.reduce((sum, pos) => sum + (pos.yieldEarnedUsd || 0), 0),
-      activePositions: existingPositions.filter(pos => pos.isActive).length,
+      activePositions: existingPositions.filter((pos) => pos.isActive).length,
       protocolCount: Object.keys(positionsByProtocol).length,
       avgAPY: weightedAPY,
       positionsByType,

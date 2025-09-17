@@ -79,7 +79,18 @@ export class CryptoService {
 
     if (redisUrl) {
       try {
-        this.redis = new Redis(redisUrl);
+        this.redis = new Redis(redisUrl, {
+          maxRetriesPerRequest: 3,
+          enableOfflineQueue: false,
+          connectTimeout: 30000,
+          lazyConnect: true,
+          keepAlive: 30000,
+          commandTimeout: 5000,
+          // Optimize connection to prevent exhaustion
+          family: 4,
+          enableAutoPipelining: true,
+          db: 0,
+        });
         logger.info('Redis client initialized for crypto service');
       } catch (error) {
         logger.error('Failed to initialize Redis:', error);
@@ -1845,19 +1856,23 @@ export class CryptoService {
   /**
    * Sync DeFi positions for a wallet
    */
-  async syncDeFiPositions(userId: string, walletId: string, options?: {
-    forceRefresh?: boolean;
-    includeClaimable?: boolean;
-    includeLending?: boolean;
-    includeLiquidity?: boolean;
-  }): Promise<{
+  async syncDeFiPositions(
+    userId: string,
+    walletId: string,
+    options?: {
+      forceRefresh?: boolean;
+      includeClaimable?: boolean;
+      includeLending?: boolean;
+      includeLiquidity?: boolean;
+    }
+  ): Promise<{
     jobId: string;
     estimatedCompletionTime: string;
   }> {
     try {
       // Verify wallet ownership
       const wallet = await prisma.cryptoWallet.findFirst({
-        where: { id: walletId, userId }
+        where: { id: walletId, userId },
       });
 
       if (!wallet) {
@@ -1870,7 +1885,11 @@ export class CryptoService {
 
       // Enqueue DeFi sync job
       if (!cryptoSyncQueue) {
-        throw new CryptoServiceError('Queue system is not available', CryptoErrorCodes.SYNC_FAILED, 503);
+        throw new CryptoServiceError(
+          'Queue system is not available',
+          CryptoErrorCodes.SYNC_FAILED,
+          503
+        );
       }
 
       const job = await cryptoSyncQueue.add(
@@ -1904,7 +1923,6 @@ export class CryptoService {
         jobId: job.id || 'unknown',
         estimatedCompletionTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
       };
-
     } catch (error) {
       if (error instanceof CryptoServiceError) throw error;
 
@@ -1948,8 +1966,8 @@ export class CryptoService {
       const summary = {
         totalValueUsd: positions.reduce((sum, p) => sum + Number(p.totalValueUsd), 0),
         totalYieldEarned: positions.reduce((sum, p) => sum + Number(p.yieldEarnedUsd || 0), 0),
-        activePositions: positions.filter(p => p.isActive).length,
-        protocolCount: new Set(positions.map(p => p.protocolName)).size,
+        activePositions: positions.filter((p) => p.isActive).length,
+        protocolCount: new Set(positions.map((p) => p.protocolName)).size,
         positionsByType: this.groupBy(positions, 'positionType'),
         positionsByProtocol: this.groupBy(positions, 'protocolName'),
       };
@@ -1959,7 +1977,6 @@ export class CryptoService {
         summary,
         filters,
       };
-
     } catch (error) {
       logger.error('Error fetching DeFi positions:', error);
       throw new CryptoServiceError(
@@ -1979,7 +1996,6 @@ export class CryptoService {
       const { defiPositionService } = await import('@/services/defiPositionService');
 
       return await defiPositionService.getDeFiAnalytics(userId, walletId);
-
     } catch (error) {
       logger.error('Error fetching DeFi analytics:', error);
       throw new CryptoServiceError(
@@ -2007,7 +2023,6 @@ export class CryptoService {
       const { defiPositionService } = await import('@/services/defiPositionService');
 
       return await defiPositionService.updatePositionMetrics(userId, positionId, updates);
-
     } catch (error) {
       logger.error('Error updating DeFi position metrics:', error);
       throw new CryptoServiceError(
@@ -2034,7 +2049,7 @@ export class CryptoService {
     try {
       // Verify wallet ownership
       const wallet = await prisma.cryptoWallet.findFirst({
-        where: { id: walletId, userId }
+        where: { id: walletId, userId },
       });
 
       if (!wallet) {
@@ -2047,7 +2062,11 @@ export class CryptoService {
 
       // Use the enhanced sync job that includes DeFi
       if (!cryptoSyncQueue) {
-        throw new CryptoServiceError('Queue system is not available', CryptoErrorCodes.SYNC_FAILED, 503);
+        throw new CryptoServiceError(
+          'Queue system is not available',
+          CryptoErrorCodes.SYNC_FAILED,
+          503
+        );
       }
 
       const job = await cryptoSyncQueue.add(
@@ -2079,16 +2098,11 @@ export class CryptoService {
         jobId: job.id || 'unknown',
         estimatedCompletionTime: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       };
-
     } catch (error) {
       if (error instanceof CryptoServiceError) throw error;
 
       logger.error('Error syncing wallet with DeFi:', error);
-      throw new CryptoServiceError(
-        'Failed to sync wallet',
-        CryptoErrorCodes.SYNC_FAILED,
-        500
-      );
+      throw new CryptoServiceError('Failed to sync wallet', CryptoErrorCodes.SYNC_FAILED, 500);
     }
   }
 

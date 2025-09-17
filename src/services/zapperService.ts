@@ -480,6 +480,7 @@ export class ZapperService {
                         price
                         symbol
                         decimals
+                        
                       }
                       
                       # App tokens at level 1 (e.g. stETH underlying wstETH)
@@ -537,6 +538,7 @@ export class ZapperService {
                                 price
                                 symbol
                                 decimals
+                                
                               }
                               
                               # Rare but possible: another app token
@@ -552,6 +554,7 @@ export class ZapperService {
                                 appId
                                 supply
                                 pricePerShare
+                                
                                 # Not going deeper than 3 levels
                               }
                             }
@@ -593,6 +596,7 @@ export class ZapperService {
                           price
                           symbol
                           decimals
+                          
                         }
                         
                         # App tokens in contract positions (e.g. supplied aUSDC)
@@ -609,6 +613,7 @@ export class ZapperService {
                           supply
                           pricePerShare
                           
+                          
                           # LEVEL 2: Underlying of app tokens in contract positions
                           tokens {
                             # Base tokens at level 2
@@ -621,6 +626,7 @@ export class ZapperService {
                               price
                               symbol
                               decimals
+                              
                             }
                             
                             # App tokens at level 2
@@ -637,6 +643,7 @@ export class ZapperService {
                               supply
                               pricePerShare
                               
+                              
                               # LEVEL 3: Third level for complex contract positions
                               tokens {
                                 # Base tokens at level 3
@@ -649,6 +656,7 @@ export class ZapperService {
                                   price
                                   symbol
                                   decimals
+                                  
                                 }
                                 
                                 # App tokens at level 3 (rare but possible)
@@ -664,6 +672,7 @@ export class ZapperService {
                                   appId
                                   supply
                                   pricePerShare
+                                  
                                   # Not going deeper than 3 levels
                                 }
                               }
@@ -705,7 +714,7 @@ export class ZapperService {
 
     const variables = {
       addresses,
-      first:10
+      first: 10,
     };
 
     try {
@@ -716,14 +725,13 @@ export class ZapperService {
 
       return await this.makeGraphQLRequest<GraphQLResponse>(query, variables);
     } catch (error) {
-      console.log('Error fetching Zapper NFTs:',error);
+      console.log('Error fetching Zapper NFTs:', error);
       logger.error('Error fetching Zapper NFTs:', error);
       throw new Error(
         `Failed to fetch Zapper NFTs: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
-
 
   async getWalletTransactions(
     addresses: string[],
@@ -782,7 +790,7 @@ export class ZapperService {
                   decimals
                   symbol
                   name
-                  imageUrlV2
+                  
                   priceData {
                     price
                     priceChange24h
@@ -813,7 +821,7 @@ export class ZapperService {
                         credibility
                         decimals
                         symbol
-                        imageUrlV2
+                        
                         priceData { price priceChange24h }
                       }
                     }
@@ -848,7 +856,7 @@ export class ZapperService {
               credibility
               decimals
               symbol
-              imageUrlV2
+              
               priceData { price priceChange24h }
             }
           }

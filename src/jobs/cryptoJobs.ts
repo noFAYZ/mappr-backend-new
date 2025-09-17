@@ -14,7 +14,13 @@ import {
 } from '@/types/crypto';
 import { AssetType, TransactionType, TransactionStatus } from '@prisma/client';
 import ZapperService, { createZapperService } from '@/services/zapperService';
-import { calculateNetWorth,  getClaimableTokens, getLPPositions, getPositionsByProtocol, parseAppBalances  } from '@/utils/zapper/appBalanceParser';
+import {
+  calculateNetWorth,
+  getClaimableTokens,
+  getLPPositions,
+  getPositionsByProtocol,
+  parseAppBalances,
+} from '@/utils/zapper/appBalanceParser';
 import { defiPositionService } from '@/services/defiPositionService';
 
 // Enhanced job processing statistics
@@ -217,7 +223,7 @@ export class CryptoJobProcessor {
         progress: 0,
         status: 'queued',
         message: 'Sync job queued',
-        startedAt: new Date()
+        startedAt: new Date(),
       });
 
       // Enhanced input validation
@@ -236,7 +242,7 @@ export class CryptoJobProcessor {
         progress: 10,
         status: 'syncing',
         message: `Starting sync for ${wallet.name} (${wallet.address.substring(0, 10)}...)`,
-        startedAt: new Date()
+        startedAt: new Date(),
       });
 
       if (!this.zerionService) {
@@ -413,7 +419,7 @@ export class CryptoJobProcessor {
         progress: 100,
         completedAt: new Date(),
         syncedData: syncedDataTypes,
-        processingTimeMs: result.processingTime
+        processingTimeMs: result.processingTime,
       });
 
       return result;
@@ -438,7 +444,7 @@ export class CryptoJobProcessor {
         progress: 0,
         error: (errorDetails as any).message || 'Unknown sync error',
         failedAt: new Date(),
-        processingTimeMs: Date.now() - context.startTime
+        processingTimeMs: Date.now() - context.startTime,
       });
 
       this.recordJobFailure(context, jobError);
@@ -560,7 +566,7 @@ export class CryptoJobProcessor {
       await job.updateProgress(0);
 
       // Publish sync started event
- /*      await userSyncProgressManager.publishProgress(userId, walletId, {
+      /*      await userSyncProgressManager.publishProgress(userId, walletId, {
   
         walletId,
         progress: 0,
@@ -591,18 +597,18 @@ export class CryptoJobProcessor {
       }
 
       // Publish sync started with wallet info
-      await userSyncProgressManager.publishProgress(userId, walletId, {
+      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
         walletId,
         progress: 10,
         status: 'syncing',
         message: `Starting sync for ${wallet.name} (${wallet.address.substring(0, 10)}...)`,
-        startedAt: new Date()
+        startedAt: new Date(),
       });
 
       const results: any = { walletId, syncedData: [], apiMetrics: {} };
 
       // Publish portfolio sync start
-      await userSyncProgressManager.publishProgress(userId, walletId, {
+      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
         walletId,
         progress: 20,
         status: 'syncing_assets',
@@ -628,7 +634,7 @@ export class CryptoJobProcessor {
 
       if (shouldSyncTransactions) {
         // Publish transaction sync start
-        await userSyncProgressManager.publishProgress(userId, walletId, {
+        await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
           walletId,
           progress: 50,
           status: 'syncing_transactions',
@@ -682,7 +688,7 @@ export class CryptoJobProcessor {
 
       if (shouldSyncNFTs && this.zapperService) {
         // Publish NFT sync start
-        await userSyncProgressManager.publishProgress(userId, walletId, {
+        await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
           walletId,
           progress: 70,
           status: 'syncing_nfts',
@@ -721,13 +727,15 @@ export class CryptoJobProcessor {
         try {
           // DeFi position sync using app balances
           // Map blockchain network to chain ID
-          const chainId = this.getChainIdFromNetwork(wallet.network);
+         // const chainId = this.getChainIdFromNetwork(wallet.network);
           const zapperResponse = await trackApiCall('getAppBalances', () =>
-            this.zapperService!.getAppBalances([wallet.address], chainId ? [chainId] : undefined)
+            this.zapperService!.getAppBalances([wallet.address])
           );
 
           if (zapperResponse?.portfolioV2) {
-            console.log(`📊 Processing DeFi positions with total value: $${zapperResponse.portfolioV2.appBalances?.totalBalanceUSD || 0}`);
+            console.log(
+              `📊 Processing DeFi positions with total value: $${zapperResponse.portfolioV2.appBalances?.totalBalanceUSD || 0}`
+            );
 
             // Sync DeFi positions to database
             const syncedPositions = await defiPositionService.syncWalletDeFiPositions(
@@ -746,35 +754,46 @@ export class CryptoJobProcessor {
 
             // Log insights
             if (claimableRewards.length > 0) {
-              const totalClaimable = claimableRewards.reduce((sum, reward) => sum + reward.balanceUSD, 0);
-              console.log(`🎁 ${claimableRewards.length} claimable rewards worth $${totalClaimable.toFixed(2)}`);
+              const totalClaimable = claimableRewards.reduce(
+                (sum, reward) => sum + reward.balanceUSD,
+                0
+              );
+              console.log(
+                `🎁 ${claimableRewards.length} claimable rewards worth $${totalClaimable.toFixed(2)}`
+              );
             }
 
             console.log(`🤝 ${Object.keys(positionsByProtocol).length} protocols engaged`);
 
             if (lpPositions.length > 0) {
               const totalLPValue = lpPositions.reduce((sum, lp) => sum + lp.balanceUSD, 0);
-              console.log(`🏊 ${lpPositions.length} LP positions worth $${totalLPValue.toFixed(2)}`);
+              console.log(
+                `🏊 ${lpPositions.length} LP positions worth $${totalLPValue.toFixed(2)}`
+              );
             }
 
-            console.log(`💰 Net worth: $${netWorth.netWorth.toFixed(2)} (Supplied: $${netWorth.totalSupplied.toFixed(2)}, Borrowed: $${netWorth.totalBorrowed.toFixed(2)})`);
+            console.log(
+              `💰 Net worth: $${netWorth.netWorth.toFixed(2)} (Supplied: $${netWorth.totalSupplied.toFixed(2)}, Borrowed: $${netWorth.totalBorrowed.toFixed(2)})`
+            );
 
             // Store DeFi metrics in result
             results.defiPositions = {
               totalPositions: syncedPositions.length,
-              totalValueUsd: syncedPositions.reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0),
+              totalValueUsd: syncedPositions.reduce(
+                (sum, pos) => sum + Number(pos.totalValueUsd),
+                0
+              ),
               claimableRewards: claimableRewards.length,
               lpPositions: lpPositions.length,
               protocolCount: Object.keys(positionsByProtocol).length,
-              netWorth
+              netWorth,
             };
           } else {
             console.log(`ℹ️ No DeFi positions found for wallet ${wallet.address}`);
           }
-      
+
           results.syncedData.push('defi');
           await job.updateProgress(90);
-          
         } catch (error) {
           console.error('❌ Error parsing DeFi positions:', error);
           // Handle parsing errors gracefully
@@ -783,7 +802,7 @@ export class CryptoJobProcessor {
       }
 
       // Publish final progress
-      await userSyncProgressManager.publishProgress(userId, walletId, {
+      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
         walletId,
         progress: 95,
         status: 'syncing',
@@ -821,8 +840,7 @@ export class CryptoJobProcessor {
 
       await job.updateProgress(100);
 
-       await userSyncProgressManager.broadcastWalletCompleted(userId, walletId, {
-   
+      await userSyncProgressManager.broadcastWalletCompleted(userId, walletId, {
         progress: 100,
         status: 'completed',
         message: 'Wallet Sync Complete',
@@ -1018,7 +1036,7 @@ export class CryptoJobProcessor {
 
       // Get wallet info
       const wallet = await prisma.cryptoWallet.findFirst({
-        where: { id: walletId, userId }
+        where: { id: walletId, userId },
       });
 
       if (!wallet) {
@@ -1034,9 +1052,9 @@ export class CryptoJobProcessor {
             walletId,
             syncSource: 'zapper',
             lastSyncAt: {
-              gte: new Date(Date.now() - 5 * 60 * 1000) // 5 minutes
-            }
-          }
+              gte: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes
+            },
+          },
         });
 
         if (recentSync) {
@@ -1056,7 +1074,10 @@ export class CryptoJobProcessor {
       }
 
       const chainId = this.getChainIdFromNetwork(wallet.network);
-      const zapperResponse = await this.zapperService.getAppBalances([wallet.address], chainId ? [chainId] : undefined);
+      const zapperResponse = await this.zapperService.getAppBalances(
+        [wallet.address],
+        chainId ? [chainId] : undefined
+      );
 
       await job.updateProgress(50);
 
@@ -1089,7 +1110,7 @@ export class CryptoJobProcessor {
       // Update wallet's last sync timestamp
       await prisma.cryptoWallet.update({
         where: { id: walletId },
-        data: { lastSyncAt: new Date() }
+        data: { lastSyncAt: new Date() },
       });
 
       await job.updateProgress(100);
@@ -1113,7 +1134,6 @@ export class CryptoJobProcessor {
 
       await this.updateJobStats(context, 'success');
       return result;
-
     } catch (error) {
       await this.handleJobError(context, error);
 
@@ -2018,7 +2038,7 @@ export class CryptoJobProcessor {
     });
   }
 
-/*   private async processDefiPositions(
+  /*   private async processDefiPositions(
     walletId: string, 
     parsedPositions: ParsedAppBalances,
     insights: {
@@ -2275,35 +2295,26 @@ export class CryptoJobProcessor {
         balanceUsd: positionData.balanceUsd,
       });
 
-      // Find existing position first
-      const existingPosition = await prismaClient.cryptoPosition.findFirst({
+      // Use single upsert operation instead of find + create/update
+      await prismaClient.cryptoPosition.upsert({
         where: {
-          walletId: walletId,
-          assetId: assetId,
+          walletId_assetId: {
+            walletId: walletId,
+            assetId: assetId || '',
+          },
+        },
+        update: {
+          ...positionData,
+          updatedAt: new Date(),
+        },
+        create: {
+          walletId,
+          assetId,
+          ...positionData,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         },
       });
-
-      if (existingPosition) {
-        // Update existing position
-        await prismaClient.cryptoPosition.update({
-          where: { id: existingPosition.id },
-          data: {
-            ...positionData,
-            updatedAt: new Date(),
-          },
-        });
-      } else {
-        // Create new position
-        await prismaClient.cryptoPosition.create({
-          data: {
-            walletId,
-            assetId,
-            ...positionData,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
-      }
 
       logger.debug('Successfully upserted position', {
         walletId: walletId.substring(0, 8) + '...',
@@ -2311,13 +2322,31 @@ export class CryptoJobProcessor {
         context: context?.jobId,
       });
     } catch (error) {
+      const errorCode = (error as any)?.code;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
       logger.error('Failed to upsert position', {
         walletId: walletId.substring(0, 8) + '...',
         context: context?.jobId,
         assetId: assetId.substring(0, 8) + '...',
-        error: error instanceof Error ? error.message : String(error),
-        positionData,
+        error: errorMessage,
+        errorCode,
+        positionData: {
+          balance: positionData.balance,
+          balanceFormatted: positionData.balanceFormatted,
+          balanceUsd: positionData.balanceUsd,
+        },
       });
+
+      // Handle specific database errors
+      if (errorCode === '22003') {
+        logger.error('Numeric overflow detected - balance value too large for database precision', {
+          originalBalance: positionData.balance,
+          balanceFormatted: positionData.balanceFormatted,
+          suggestion: 'Consider using scientific notation or increasing database precision',
+        });
+      }
+
       throw error;
     }
   }
@@ -2395,8 +2424,29 @@ export class CryptoJobProcessor {
   }
 
   private parseFloat(value: any, defaultValue: number): number {
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? defaultValue : parsed;
+    if (value === null || value === undefined || value === '') {
+      return defaultValue;
+    }
+
+    // Handle string representations of very large numbers
+    const stringValue = String(value);
+    const parsed = parseFloat(stringValue);
+
+    if (isNaN(parsed)) {
+      return defaultValue;
+    }
+
+    // Check for values that would cause overflow (above 10^20 which is safe for 38,18 precision)
+    const MAX_SAFE_VALUE = 1e20;
+    if (parsed > MAX_SAFE_VALUE) {
+      logger.warn('Large balance value detected, capping to safe limit', {
+        originalValue: stringValue,
+        cappedValue: MAX_SAFE_VALUE,
+      });
+      return MAX_SAFE_VALUE;
+    }
+
+    return parsed;
   }
 
   private maskAddress(address: string): string {
@@ -3134,16 +3184,16 @@ export class CryptoJobProcessor {
    */
   private getChainIdFromNetwork(network: string): number | undefined {
     const networkMap: Record<string, number> = {
-      'ethereum': 1,
-      'polygon': 137,
-      'arbitrum': 42161,
-      'optimism': 10,
-      'base': 8453,
-      'bsc': 56,
-      'avalanche': 43114,
-      'fantom': 250,
-      'celo': 42220,
-      'linea': 59144,
+      ethereum: 1,
+      polygon: 137,
+      arbitrum: 42161,
+      optimism: 10,
+      base: 8453,
+      bsc: 56,
+      avalanche: 43114,
+      fantom: 250,
+      celo: 42220,
+      linea: 59144,
     };
     return networkMap[network.toLowerCase()];
   }

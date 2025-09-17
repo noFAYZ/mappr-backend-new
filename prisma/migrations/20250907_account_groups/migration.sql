@@ -16,17 +16,10 @@ CREATE TABLE IF NOT EXISTS "account_groups" (
     CONSTRAINT "account_groups_pkey" PRIMARY KEY ("id")
 );
 
--- Add groupId column to financial_accounts
-ALTER TABLE "financial_accounts" ADD COLUMN IF NOT EXISTS "groupId" TEXT;
-
--- Add groupId column to crypto_wallets  
+-- Add groupId column to crypto_wallets
 ALTER TABLE "crypto_wallets" ADD COLUMN IF NOT EXISTS "groupId" TEXT;
 
 -- Add foreign key constraints
-ALTER TABLE "financial_accounts" 
-ADD CONSTRAINT "financial_accounts_groupId_fkey" 
-FOREIGN KEY ("groupId") REFERENCES "account_groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
 ALTER TABLE "crypto_wallets"
 ADD CONSTRAINT "crypto_wallets_groupId_fkey"
 FOREIGN KEY ("groupId") REFERENCES "account_groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;

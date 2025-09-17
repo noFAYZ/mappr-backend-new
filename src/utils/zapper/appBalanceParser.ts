@@ -55,7 +55,6 @@ export interface BaseToken {
   symbol: string;
   decimals: number;
   level: number;
-
 }
 
 export interface AppToken extends BaseToken {

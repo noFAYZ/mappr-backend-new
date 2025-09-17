@@ -500,17 +500,48 @@ export class CryptoJobProcessor {
       hasZapperService: !!this.zapperService,
     });
 
-    // Initialize API tracking
+    // Dynamic progress tracking
+    const syncSteps = [
+      { name: 'portfolio', weight: 20, enabled: true },
+      { name: 'assets', weight: 20, enabled: shouldSyncAssets },
+      { name: 'transactions', weight: 30, enabled: shouldSyncTransactions },
+      { name: 'nfts', weight: 15, enabled: shouldSyncNFTs && !!this.zapperService },
+      { name: 'defi', weight: 15, enabled: shouldSyncDeFi && !!this.zapperService },
+    ];
+
+    const enabledSteps = syncSteps.filter((step) => step.enabled);
+    const totalWeight = enabledSteps.reduce((sum, step) => sum + step.weight, 0);
+    let completedWeight = 0;
+
+    // Safe progress update function
+    const updateProgress = async (increment: number, status: string, message: string) => {
+      try {
+        completedWeight += increment;
+        const progressPercent = Math.min(Math.round((completedWeight / totalWeight) * 100), 100);
+
+        await job.updateProgress(progressPercent);
+        await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
+          walletId,
+          progress: progressPercent,
+          status: status as any,
+          message,
+        });
+      } catch (error) {
+        logger.warn('Progress update failed, continuing sync', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    // Optimized API tracking - avoid large data stringification
     const apiTracker = {
       totalRequests: 0,
       totalResponseTime: 0,
-      totalDataSize: 0,
       successfulRequests: 0,
       failedRequests: 0,
       requestDetails: [] as Array<{
         endpoint: string;
         responseTime: number;
-        dataSize: number;
         success: boolean;
         error?: string;
         timestamp: Date;
@@ -525,21 +556,16 @@ export class CryptoJobProcessor {
       try {
         const result = await apiCall();
         const responseTime = Date.now() - startTime;
-        const dataSize = JSON.stringify(result).length;
 
         apiTracker.totalResponseTime += responseTime;
-        apiTracker.totalDataSize += dataSize;
         apiTracker.successfulRequests++;
 
-        const requestDetail = {
+        apiTracker.requestDetails.push({
           endpoint,
           responseTime,
-          dataSize,
           success: true,
           timestamp: new Date(),
-        };
-
-        apiTracker.requestDetails.push(requestDetail);
+        });
 
         return result;
       } catch (error) {
@@ -547,40 +573,20 @@ export class CryptoJobProcessor {
         apiTracker.totalResponseTime += responseTime;
         apiTracker.failedRequests++;
 
-        const requestDetail = {
+        apiTracker.requestDetails.push({
           endpoint,
           responseTime,
-          dataSize: 0,
           success: false,
           error: error instanceof Error ? error.message : String(error),
           timestamp: new Date(),
-        };
-
-        apiTracker.requestDetails.push(requestDetail);
+        });
 
         throw error;
       }
     };
 
     try {
-      await job.updateProgress(0);
-
-      // Publish sync started event
-      /*      await userSyncProgressManager.publishProgress(userId, walletId, {
-  
-        walletId,
-        progress: 0,
-        status: 'queued',
-        message: 'Full sync job queued',
-        startedAt: new Date()
-      }); */
-
-      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
-        walletId,
-        progress: 0,
-        status: 'queued',
-        message: 'Full sync job queued',
-      });
+      await updateProgress(0, 'queued', 'Full sync job queued');
 
       console.log(`🚀 Starting full wallet sync for ${this.maskAddress(walletId)}`);
 
@@ -596,218 +602,244 @@ export class CryptoJobProcessor {
         );
       }
 
-      // Publish sync started with wallet info
-      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
-        walletId,
-        progress: 10,
-        status: 'syncing',
-        message: `Starting sync for ${wallet.name} (${wallet.address.substring(0, 10)}...)`,
-        startedAt: new Date(),
-      });
+      await updateProgress(
+        0,
+        'syncing',
+        `Starting sync for ${wallet.name} (${wallet.address.substring(0, 10)}...)`
+      );
 
       const results: any = { walletId, syncedData: [], apiMetrics: {} };
 
-      // Publish portfolio sync start
-      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
-        walletId,
-        progress: 20,
-        status: 'syncing_assets',
-        message: 'Fetching portfolio data...',
-      });
-
-      // Track portfolio API call
+      // Always sync portfolio first (required for all sync operations)
+      await updateProgress(2, 'syncing_assets', 'Fetching portfolio data...');
       const portfolio = await trackApiCall('getWalletPortfolio', () =>
         this.zerionService!.getWalletPortfolio(wallet.address)
       );
       await this.processPortfolioData(wallet.id, portfolio);
       results.syncedData.push('portfolio');
 
+      // Calculate step weight for portfolio completion
+      const portfolioStep = syncSteps.find((s) => s.name === 'portfolio');
+      if (portfolioStep) {
+        await updateProgress(portfolioStep.weight - 2, 'syncing', 'Portfolio data processed');
+      }
+
+      // Prepare parallel sync operations
+      const parallelOperations = [];
+
       if (shouldSyncAssets) {
-        const positions = await trackApiCall('getWalletPositions', () =>
-          this.zerionService!.getWalletPositions(wallet.address)
-        );
-        console.log(`📊 Processing ${positions?.data?.length} asset positions`);
-        await this.processPositions(wallet.id, positions?.data);
-        results.syncedData.push('assets');
-        await job.updateProgress(25);
+        parallelOperations.push(async () => {
+          await updateProgress(2, 'syncing_assets', 'Fetching asset positions...');
+          const positions = await trackApiCall('getWalletPositions', () =>
+            this.zerionService!.getWalletPositions(wallet.address)
+          );
+          console.log(`📊 Processing ${positions?.data?.length} asset positions`);
+          await this.processPositions(wallet.id, positions?.data);
+          results.syncedData.push('assets');
+
+          const assetsStep = syncSteps.find((s) => s.name === 'assets');
+          if (assetsStep) {
+            await updateProgress(
+              assetsStep.weight - 2,
+              'syncing',
+              `Processed ${positions?.data?.length || 0} asset positions`
+            );
+          }
+        });
       }
 
       if (shouldSyncTransactions) {
-        // Publish transaction sync start
-        await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
-          walletId,
-          progress: 50,
-          status: 'syncing_transactions',
-          message: 'Fetching transaction history...',
-        });
+        parallelOperations.push(async () => {
+          await updateProgress(3, 'syncing_transactions', 'Fetching transaction history...');
 
-        // Get the last transaction timestamp from database for incremental sync
-        const lastTransaction = await prisma.cryptoTransaction.findFirst({
-          where: { walletId: wallet.id },
-          orderBy: { timestamp: 'desc' },
-          select: { timestamp: true, hash: true },
-        });
+          // Get the last transaction timestamp from database for incremental sync
+          const lastTransaction = await prisma.cryptoTransaction.findFirst({
+            where: { walletId: wallet.id },
+            orderBy: { timestamp: 'desc' },
+            select: { timestamp: true, hash: true },
+          });
 
-        let transactionData;
-        let syncType = 'full';
+          let transactionData;
+          let syncType = 'full';
 
-        if (lastTransaction) {
-          // Incremental sync: fetch only transactions after the last one
-          const lastTimestamp = lastTransaction.timestamp.toISOString();
-          syncType = 'incremental';
+          if (lastTransaction) {
+            // Incremental sync: fetch only transactions after the last one
+            const lastTimestamp = lastTransaction.timestamp.toISOString();
+            syncType = 'incremental';
 
-          transactionData = await trackApiCall('getWalletTransactions (incremental)', () =>
-            this.zerionService!.getWalletTransactions(wallet.address, {
-              'filter[mined_at_gte]': lastTimestamp,
-              sort: 'mined_at',
-              'page[size]': 100, // Reasonable page size for incremental updates
-            })
+            transactionData = await trackApiCall('getWalletTransactions (incremental)', () =>
+              this.zerionService!.getWalletTransactions(wallet.address, {
+                'filter[mined_at_gte]': lastTimestamp,
+                sort: 'mined_at',
+                'page[size]': 100,
+              })
+            );
+          } else {
+            // First-time sync: fetch recent transactions with limit
+            syncType = 'first-time';
+
+            transactionData = await trackApiCall('getWalletTransactions (first-time)', () =>
+              this.zerionService!.getWalletTransactions(wallet.address, {
+                sort: '-mined_at',
+                'page[size]': 100,
+              })
+            );
+          }
+
+          const fetchedCount = this.extractItemCount(transactionData);
+          console.log(`💸 Processing ${fetchedCount} transactions (${syncType})`);
+
+          await updateProgress(
+            10,
+            'syncing_transactions',
+            `Processing ${fetchedCount} transactions...`
           );
-        } else {
-          // First-time sync: fetch recent transactions with limit
-          syncType = 'first-time';
+          await this.processTransactionData(wallet.id, transactionData);
+          results.syncedData.push('transactions');
+          results.transactionsSyncType = syncType;
+          results.transactionsFetched = fetchedCount;
 
-          transactionData = await trackApiCall('getWalletTransactions (first-time)', () =>
-            this.zerionService!.getWalletTransactions(wallet.address, {
-              sort: '-mined_at', // Most recent first
-              'page[size]': 100, // Limit initial sync
-            })
-          );
-        }
-
-        // Log sync efficiency
-        const fetchedCount = this.extractItemCount(transactionData);
-
-        console.log(`💸 Processed ${fetchedCount} transactions (${syncType})`);
-        await this.processTransactionData(wallet.id, transactionData);
-        results.syncedData.push('transactions');
-        results.transactionsSyncType = syncType;
-        results.transactionsFetched = fetchedCount;
-        await job.updateProgress(50);
+          const transactionsStep = syncSteps.find((s) => s.name === 'transactions');
+          if (transactionsStep) {
+            await updateProgress(
+              transactionsStep.weight - 13,
+              'syncing',
+              `Processed ${fetchedCount} transactions (${syncType})`
+            );
+          }
+        });
       }
 
       if (shouldSyncNFTs && this.zapperService) {
-        // Publish NFT sync start
-        await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
-          walletId,
-          progress: 70,
-          status: 'syncing_nfts',
-          message: 'Fetching NFT collections...',
+        parallelOperations.push(async () => {
+          try {
+            await updateProgress(2, 'syncing_nfts', 'Fetching NFT collections...');
+
+            const nfts = await trackApiCall('getWalletNFTs', () =>
+              this.zapperService!.getWalletNFTs([wallet.address])
+            );
+
+            const nftCount = nfts?.portfolioV2?.nftBalances?.totalTokensOwned || 0;
+            console.log(`🖼️ Processing ${nftCount} NFTs`);
+
+            await updateProgress(5, 'syncing_nfts', `Processing ${nftCount} NFTs...`);
+            await this.processZapperNFTs(wallet.id, nfts);
+
+            results.syncedData.push('nfts');
+            results.nftsSyncType = 'zapper';
+            results.nftsFetched = nftCount;
+
+            const nftsStep = syncSteps.find((s) => s.name === 'nfts');
+            if (nftsStep) {
+              await updateProgress(nftsStep.weight - 7, 'syncing', `Processed ${nftCount} NFTs`);
+            }
+          } catch (error) {
+            logger.warn('NFT sync failed, continuing', {
+              walletId: wallet.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         });
-
-        try {
-          // Track portfolio API call
-          const nfts = await trackApiCall('getWalletNFTs', () =>
-            this.zapperService!.getWalletNFTs([wallet.address])
-          );
-
-          const nftCount = nfts?.portfolioV2?.nftBalances?.totalTokensOwned || 0;
-          console.log(`🖼️ Processing ${nftCount} NFTs`);
-
-          // Process NFTs according to crypto_nfts schema
-          await this.processZapperNFTs(wallet.id, nfts);
-
-          results.syncedData.push('nfts');
-          results.nftsSyncType = 'zapper';
-          results.nftsFetched = nftCount;
-        } catch (error) {
-          logger.warn('NFT sync failed, continuing', {
-            walletId: wallet.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-        await job.updateProgress(75);
       } else if (shouldSyncNFTs && !this.zapperService) {
         console.log(`⚠️ NFT sync requested but Zapper service not available`);
-      } else if (!shouldSyncNFTs) {
-        console.log(`ℹ️ NFT sync skipped (not requested in syncTypes)`);
       }
 
-      if (shouldSyncDeFi) {
-        try {
-          // DeFi position sync using app balances
-          // Map blockchain network to chain ID
-         // const chainId = this.getChainIdFromNetwork(wallet.network);
-          const zapperResponse = await trackApiCall('getAppBalances', () =>
-            this.zapperService!.getAppBalances([wallet.address])
-          );
+      if (shouldSyncDeFi && this.zapperService) {
+        parallelOperations.push(async () => {
+          try {
+            await updateProgress(3, 'syncing_defi', 'Fetching DeFi positions...');
 
-          if (zapperResponse?.portfolioV2) {
-            console.log(
-              `📊 Processing DeFi positions with total value: $${zapperResponse.portfolioV2.appBalances?.totalBalanceUSD || 0}`
+            const zapperResponse = await trackApiCall('getAppBalances', () =>
+              this.zapperService!.getAppBalances([wallet.address])
             );
 
-            // Sync DeFi positions to database
-            const syncedPositions = await defiPositionService.syncWalletDeFiPositions(
-              wallet.id,
-              zapperResponse
-            );
+            if (zapperResponse?.portfolioV2) {
+              const totalValueUsd = zapperResponse.portfolioV2.appBalances?.totalBalanceUSD || 0;
+              console.log(`📊 Processing DeFi positions with total value: $${totalValueUsd}`);
 
-            console.log(`🏦 Synced ${syncedPositions.length} DeFi positions to database`);
+              await updateProgress(4, 'syncing_defi', 'Processing DeFi positions...');
 
-            // Parse for additional analytics
-            const parsedPositions = parseAppBalances(zapperResponse);
-            const claimableRewards = getClaimableTokens(parsedPositions);
-            const lpPositions = getLPPositions(parsedPositions);
-            const positionsByProtocol = getPositionsByProtocol(parsedPositions);
-            const netWorth = calculateNetWorth(parsedPositions);
-
-            // Log insights
-            if (claimableRewards.length > 0) {
-              const totalClaimable = claimableRewards.reduce(
-                (sum, reward) => sum + reward.balanceUSD,
-                0
+              const syncedPositions = await defiPositionService.syncWalletDeFiPositions(
+                wallet.id,
+                zapperResponse
               );
+
+              console.log(`🏦 Synced ${syncedPositions.length} DeFi positions to database`);
+
+              await updateProgress(3, 'syncing_defi', 'Analyzing DeFi data...');
+
+              // Parse for additional analytics
+              const parsedPositions = parseAppBalances(zapperResponse);
+              const claimableRewards = getClaimableTokens(parsedPositions);
+              const lpPositions = getLPPositions(parsedPositions);
+              const positionsByProtocol = getPositionsByProtocol(parsedPositions);
+              const netWorth = calculateNetWorth(parsedPositions);
+
+              // Log insights
+              if (claimableRewards.length > 0) {
+                const totalClaimable = claimableRewards.reduce(
+                  (sum, reward) => sum + reward.balanceUSD,
+                  0
+                );
+                console.log(
+                  `🎁 ${claimableRewards.length} claimable rewards worth $${totalClaimable.toFixed(2)}`
+                );
+              }
+
+              console.log(`🤝 ${Object.keys(positionsByProtocol).length} protocols engaged`);
+
+              if (lpPositions.length > 0) {
+                const totalLPValue = lpPositions.reduce((sum, lp) => sum + lp.balanceUSD, 0);
+                console.log(
+                  `🏊 ${lpPositions.length} LP positions worth $${totalLPValue.toFixed(2)}`
+                );
+              }
+
               console.log(
-                `🎁 ${claimableRewards.length} claimable rewards worth $${totalClaimable.toFixed(2)}`
+                `💰 Net worth: $${netWorth.netWorth.toFixed(2)} (Supplied: $${netWorth.totalSupplied.toFixed(2)}, Borrowed: $${netWorth.totalBorrowed.toFixed(2)})`
               );
+
+              results.defiPositions = {
+                totalPositions: syncedPositions.length,
+                totalValueUsd: syncedPositions.reduce(
+                  (sum, pos) => sum + Number(pos.totalValueUsd),
+                  0
+                ),
+                claimableRewards: claimableRewards.length,
+                lpPositions: lpPositions.length,
+                protocolCount: Object.keys(positionsByProtocol).length,
+                netWorth,
+              };
+            } else {
+              console.log(`ℹ️ No DeFi positions found for wallet ${wallet.address}`);
             }
 
-            console.log(`🤝 ${Object.keys(positionsByProtocol).length} protocols engaged`);
+            results.syncedData.push('defi');
 
-            if (lpPositions.length > 0) {
-              const totalLPValue = lpPositions.reduce((sum, lp) => sum + lp.balanceUSD, 0);
-              console.log(
-                `🏊 ${lpPositions.length} LP positions worth $${totalLPValue.toFixed(2)}`
-              );
+            const defiStep = syncSteps.find((s) => s.name === 'defi');
+            if (defiStep) {
+              await updateProgress(defiStep.weight - 10, 'syncing', `Processed DeFi positions`);
             }
-
-            console.log(
-              `💰 Net worth: $${netWorth.netWorth.toFixed(2)} (Supplied: $${netWorth.totalSupplied.toFixed(2)}, Borrowed: $${netWorth.totalBorrowed.toFixed(2)})`
-            );
-
-            // Store DeFi metrics in result
-            results.defiPositions = {
-              totalPositions: syncedPositions.length,
-              totalValueUsd: syncedPositions.reduce(
-                (sum, pos) => sum + Number(pos.totalValueUsd),
-                0
-              ),
-              claimableRewards: claimableRewards.length,
-              lpPositions: lpPositions.length,
-              protocolCount: Object.keys(positionsByProtocol).length,
-              netWorth,
-            };
-          } else {
-            console.log(`ℹ️ No DeFi positions found for wallet ${wallet.address}`);
+          } catch (error) {
+            console.error('❌ Error processing DeFi positions:', error);
+            logger.warn('DeFi sync failed, continuing', {
+              walletId: wallet.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
           }
-
-          results.syncedData.push('defi');
-          await job.updateProgress(90);
-        } catch (error) {
-          console.error('❌ Error parsing DeFi positions:', error);
-          // Handle parsing errors gracefully
-          throw error;
-        }
+        });
       }
 
-      // Publish final progress
-      await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
-        walletId,
-        progress: 95,
-        status: 'syncing',
-        message: 'Finalizing sync...',
-      });
+      // Execute all sync operations in parallel (where possible)
+      if (parallelOperations.length > 0) {
+        await updateProgress(0, 'syncing', 'Running sync operations...');
+
+        // Execute operations in parallel for better performance
+        await Promise.allSettled(parallelOperations.map((op) => op()));
+      }
+
+      // Finalize sync
+      await updateProgress(2, 'syncing', 'Finalizing sync...');
 
       await prisma.cryptoWallet.update({
         where: { id: walletId },
@@ -821,7 +853,6 @@ export class CryptoJobProcessor {
       const totalSyncTime = Date.now() - apiTracker.startTime;
       const avgResponseTime =
         apiTracker.totalRequests > 0 ? apiTracker.totalResponseTime / apiTracker.totalRequests : 0;
-      const totalDataSizeMB = apiTracker.totalDataSize / (1024 * 1024);
 
       results.apiMetrics = {
         totalRequests: apiTracker.totalRequests,
@@ -833,17 +864,19 @@ export class CryptoJobProcessor {
             : 0,
         totalResponseTime: apiTracker.totalResponseTime,
         averageResponseTime: avgResponseTime,
-        totalDataSizeMB: totalDataSizeMB,
         totalSyncTimeMs: totalSyncTime,
         requestDetails: apiTracker.requestDetails,
       };
 
-      await job.updateProgress(100);
+      // Ensure 100% completion
+      await updateProgress(totalWeight - completedWeight, 'completed', 'Wallet sync complete');
 
       await userSyncProgressManager.broadcastWalletCompleted(userId, walletId, {
         progress: 100,
         status: 'completed',
         message: 'Wallet Sync Complete',
+        syncedData: results.syncedData,
+        completedAt: new Date(),
       });
 
       console.log(`✅ Wallet sync completed - ${results.syncedData.join(', ')}`);
@@ -860,8 +893,26 @@ export class CryptoJobProcessor {
       );
       const totalSyncTime = Date.now() - apiTracker.startTime;
 
+      // Safely broadcast failure without throwing additional errors
+      try {
+        await userSyncProgressManager.broadcastWalletProgress(userId, walletId, {
+          walletId,
+          progress: completedWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0,
+          status: 'failed',
+          message: `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        await userSyncProgressManager.broadcastWalletFailed(userId, walletId, error);
+      } catch (broadcastError) {
+        logger.warn('Failed to broadcast sync failure', {
+          error: broadcastError instanceof Error ? broadcastError.message : String(broadcastError),
+        });
+      }
+
       logger.error(`Full wallet sync failed for wallet ${walletId}:`, {
         error: error instanceof Error ? error.message : String(error),
+        completedSteps: Math.round((completedWeight / totalWeight) * 100),
         apiMetrics: {
           totalRequests: apiTracker.totalRequests,
           successfulRequests: apiTracker.successfulRequests,

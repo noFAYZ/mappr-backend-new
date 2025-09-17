@@ -14,14 +14,7 @@ import {
 } from '@/types/crypto';
 import { AssetType, TransactionType, TransactionStatus } from '@prisma/client';
 import ZapperService, { createZapperService } from '@/services/zapperService';
-import {
-  calculateNetWorth,
-  getClaimableTokens,
-  getLPPositions,
-  getPositionsByProtocol,
-  parseAppBalances,
-} from '@/utils/zapper/appBalanceParser';
-import { defiPositionService } from '@/services/defiPositionService';
+import { defiAppService } from '@/services/defiAppService';
 
 // Enhanced job processing statistics
 interface JobStats {
@@ -753,62 +746,70 @@ export class CryptoJobProcessor {
               this.zapperService!.getAppBalances([wallet.address])
             );
 
-            if (zapperResponse?.portfolioV2) {
-              const totalValueUsd = zapperResponse.portfolioV2.appBalances?.totalBalanceUSD || 0;
+            if ((zapperResponse as any)?.portfolioV2) {
+              const totalValueUsd =
+                (zapperResponse as any).portfolioV2.appBalances?.totalBalanceUSD || 0;
               console.log(`📊 Processing DeFi positions with total value: $${totalValueUsd}`);
 
-              await updateProgress(4, 'syncing_defi', 'Processing DeFi positions...');
+              await updateProgress(2, 'syncing_defi', 'Processing DeFi positions...');
 
-              const syncedPositions = await defiPositionService.syncWalletDeFiPositions(
+              // Sync using new normalized structure
+              const newDefiData = await defiAppService.syncWalletDeFiData(
                 wallet.id,
-                zapperResponse
+                zapperResponse as any // Type compatibility with existing GraphQLResponse
               );
 
-              console.log(`🏦 Synced ${syncedPositions.length} DeFi positions to database`);
+              console.log(
+                `🏦 Synced ${newDefiData.apps.length} DeFi apps and ${newDefiData.positions.length} positions to new schema`
+              );
 
-              await updateProgress(3, 'syncing_defi', 'Analyzing DeFi data...');
+              await updateProgress(5, 'syncing_defi', 'Analyzing DeFi data...');
 
-              // Parse for additional analytics
-              const parsedPositions = parseAppBalances(zapperResponse);
-              const claimableRewards = getClaimableTokens(parsedPositions);
-              const lpPositions = getLPPositions(parsedPositions);
-              const positionsByProtocol = getPositionsByProtocol(parsedPositions);
-              const netWorth = calculateNetWorth(parsedPositions);
+              // Get analytics from new normalized schema
+              const newAnalytics = await defiAppService.getDeFiAnalytics(userId, wallet.id);
 
-              // Log insights
-              if (claimableRewards.length > 0) {
-                const totalClaimable = claimableRewards.reduce(
-                  (sum, reward) => sum + reward.balanceUSD,
+              // Log insights using new schema data
+              if (newAnalytics.claimableRewards.length > 0) {
+                const totalClaimable = newAnalytics.claimableRewards.reduce(
+                  (sum, reward) => sum + reward.amountUsd,
                   0
                 );
                 console.log(
-                  `🎁 ${claimableRewards.length} claimable rewards worth $${totalClaimable.toFixed(2)}`
+                  `🎁 ${newAnalytics.claimableRewards.length} claimable rewards worth $${totalClaimable.toFixed(2)}`
                 );
               }
 
-              console.log(`🤝 ${Object.keys(positionsByProtocol).length} protocols engaged`);
+              console.log(`🤝 ${newAnalytics.summary.protocolCount} protocols engaged`);
 
-              if (lpPositions.length > 0) {
-                const totalLPValue = lpPositions.reduce((sum, lp) => sum + lp.balanceUSD, 0);
+              if (newAnalytics.lpPositions.length > 0) {
+                const totalLPValue = newAnalytics.lpPositions.reduce(
+                  (sum, lp) => sum + lp.totalValueUsd,
+                  0
+                );
                 console.log(
-                  `🏊 ${lpPositions.length} LP positions worth $${totalLPValue.toFixed(2)}`
+                  `🏊 ${newAnalytics.lpPositions.length} LP positions worth $${totalLPValue.toFixed(2)}`
                 );
               }
 
               console.log(
-                `💰 Net worth: $${netWorth.netWorth.toFixed(2)} (Supplied: $${netWorth.totalSupplied.toFixed(2)}, Borrowed: $${netWorth.totalBorrowed.toFixed(2)})`
+                `💰 Net worth: $${newAnalytics.summary.netWorth.netWorth.toFixed(2)} (Supplied: $${newAnalytics.summary.netWorth.totalSupplied.toFixed(2)}, Borrowed: $${newAnalytics.summary.netWorth.totalBorrowed.toFixed(2)}, Staked: $${newAnalytics.summary.netWorth.totalStaked.toFixed(2)})`
               );
 
               results.defiPositions = {
-                totalPositions: syncedPositions.length,
-                totalValueUsd: syncedPositions.reduce(
-                  (sum, pos) => sum + Number(pos.totalValueUsd),
-                  0
-                ),
-                claimableRewards: claimableRewards.length,
-                lpPositions: lpPositions.length,
-                protocolCount: Object.keys(positionsByProtocol).length,
-                netWorth,
+                totalApps: newAnalytics.summary.protocolCount,
+                totalPositions: newAnalytics.summary.activePositions,
+                totalValueUsd: newAnalytics.summary.totalValueUsd,
+                totalYieldEarned: newAnalytics.summary.totalYieldEarned,
+                avgAPY: newAnalytics.summary.avgAPY,
+                claimableRewards: newAnalytics.claimableRewards.length,
+                lpPositions: newAnalytics.lpPositions.length,
+                protocolCount: newAnalytics.summary.protocolCount,
+                netWorth: newAnalytics.summary.netWorth,
+                networkDistribution: newAnalytics.summary.networkDistribution,
+                positionTypeDistribution: newAnalytics.summary.positionTypeDistribution,
+                metaTypeDistribution: newAnalytics.summary.metaTypeDistribution,
+                protocolBreakdown: newAnalytics.protocolBreakdown,
+                apps: newAnalytics.apps,
               };
             } else {
               console.log(`ℹ️ No DeFi positions found for wallet ${wallet.address}`);
@@ -1098,10 +1099,9 @@ export class CryptoJobProcessor {
 
       // Check if sync is needed (skip if recent sync exists and not forced)
       if (!forceRefresh) {
-        const recentSync = await prisma.deFiPosition.findFirst({
+        const recentSync = await prisma.deFiAppPosition.findFirst({
           where: {
             walletId,
-            syncSource: 'zapper',
             lastSyncAt: {
               gte: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes
             },
@@ -1132,7 +1132,7 @@ export class CryptoJobProcessor {
 
       await job.updateProgress(50);
 
-      if (!zapperResponse?.portfolioV2) {
+      if (!(zapperResponse as any)?.portfolioV2) {
         logger.warn('No Zapper app balances data received', {
           walletId,
           address: wallet.address,
@@ -1141,20 +1141,13 @@ export class CryptoJobProcessor {
         return { message: 'No DeFi positions found' };
       }
 
-      // Sync DeFi positions using the service
-      const syncedPositions = await defiPositionService.syncWalletDeFiPositions(
-        walletId,
-        zapperResponse
-      );
+      // Sync using new normalized structure
+      await defiAppService.syncWalletDeFiData(walletId, zapperResponse as any);
 
-      await job.updateProgress(80);
+      await job.updateProgress(70);
 
-      // Parse additional data for analytics
-      const parsedData = parseAppBalances(zapperResponse);
-      const claimableTokens = getClaimableTokens(parsedData);
-      const lpPositions = getLPPositions(parsedData);
-      const protocolPositions = getPositionsByProtocol(parsedData);
-      const netWorth = calculateNetWorth(parsedData);
+      // Get analytics from new normalized schema
+      const newAnalytics = await defiAppService.getDeFiAnalytics(userId, walletId);
 
       await job.updateProgress(90);
 
@@ -1167,12 +1160,20 @@ export class CryptoJobProcessor {
       await job.updateProgress(100);
 
       const result = {
-        syncedPositions: syncedPositions.length,
-        totalValueUsd: syncedPositions.reduce((sum, pos) => sum + Number(pos.totalValueUsd), 0),
-        claimableTokens: claimableTokens.length,
-        lpPositions: lpPositions.length,
-        protocolCount: Object.keys(protocolPositions).length,
-        netWorth,
+        totalApps: newAnalytics.summary.protocolCount,
+        totalPositions: newAnalytics.summary.activePositions,
+        totalValueUsd: newAnalytics.summary.totalValueUsd,
+        totalYieldEarned: newAnalytics.summary.totalYieldEarned,
+        avgAPY: newAnalytics.summary.avgAPY,
+        claimableTokens: newAnalytics.claimableRewards.length,
+        lpPositions: newAnalytics.lpPositions.length,
+        protocolCount: newAnalytics.summary.protocolCount,
+        netWorth: newAnalytics.summary.netWorth,
+        networkDistribution: newAnalytics.summary.networkDistribution,
+        positionTypeDistribution: newAnalytics.summary.positionTypeDistribution,
+        metaTypeDistribution: newAnalytics.summary.metaTypeDistribution,
+        protocolBreakdown: newAnalytics.protocolBreakdown,
+        apps: newAnalytics.apps,
         lastSyncAt: new Date(),
       };
 

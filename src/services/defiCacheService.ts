@@ -4,7 +4,8 @@
 import Redis from 'ioredis';
 import { logger } from '@/utils/logger';
 import { DeFiPosition } from '@prisma/client';
-import { DeFiAnalytics } from '@/services/defiPositionService';
+// DeFiAnalytics type - using any for now since this service is not actively used
+type DeFiAnalytics = any;
 
 export interface CacheOptions {
   ttl?: number; // Time to live in seconds

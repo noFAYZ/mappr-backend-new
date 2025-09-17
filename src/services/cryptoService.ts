@@ -543,9 +543,10 @@ export class CryptoService {
             orderBy: { timestamp: 'desc' },
             take: 10, // Limit to 10 most recent transactions
           }),
-          // Get DeFi positions
-          prisma.deFiPosition.findMany({
+          // Get DeFi positions (new schema)
+          prisma.deFiAppPosition.findMany({
             where: { walletId, isActive: true },
+            include: { app: true },
           }),
           prisma.cryptoWallet.findMany({
             where: { id: walletId },
@@ -706,31 +707,76 @@ export class CryptoService {
         // Recent transactions
         transactions: serializedTransactions,
 
-        // DeFi positions
-        defiPositions: defiPositions.map((defi) => ({
-          id: defi.id,
-          protocolName: defi.protocolName,
-          protocolType: defi.protocolType,
-          contractAddress: defi.contractAddress,
-          network: defi.network,
-          positionType: defi.positionType,
-          poolName: defi.poolName,
-          totalValueUsd: defi.totalValueUsd.toNumber(),
-          principalUsd: defi.principalUsd?.toNumber() || null,
-          yieldEarned: defi.yieldEarned?.toNumber() || null,
-          yieldEarnedUsd: defi.yieldEarnedUsd?.toNumber() || null,
-          apr: defi.apr?.toNumber() || null,
-          apy: defi.apy?.toNumber() || null,
-          dailyYield: defi.dailyYield?.toNumber() || null,
-          totalReturn: defi.totalReturn?.toNumber() || null,
-          totalReturnPct: defi.totalReturnPct?.toNumber() || null,
-          assets: defi.assets,
-          isActive: defi.isActive,
-          canWithdraw: defi.canWithdraw,
-          lockupEnd: defi.lockupEnd,
-          positionData: defi.positionData,
-          lastYieldClaim: defi.lastYieldClaim,
-        })),
+        // DeFi positions (new schema) - grouped by app
+        defiApps: (() => {
+          // Group positions by app + network combination
+          const appGroups = defiPositions.reduce(
+            (acc, defi) => {
+              const appKey = `${defi.app.slug}_${defi.app.network || 'unknown'}`;
+
+              if (!acc[appKey]) {
+                acc[appKey] = {
+                  app: {
+                    id: defi.app.id,
+                    slug: defi.app.slug,
+                    network: defi.app.network,
+                    displayName: defi.app.displayName,
+                    description: defi.app.description,
+                    category: defi.app.category,
+                    subcategory: defi.app.subcategory,
+                    imgUrl: defi.app.imgUrl,
+                    url: defi.app.url,
+                    isVerified: defi.app.isVerified,
+                    riskScore: defi.app.riskScore,
+                  },
+                  positions: [],
+                  totalValueUsd: 0,
+                  positionCount: 0,
+                };
+              }
+
+              // Add position to the app group
+              const position = {
+                id: defi.id,
+                contractAddress: defi.contractAddress,
+                network: defi.network,
+                positionType: defi.positionType,
+                groupId: defi.groupId,
+                groupLabel: defi.groupLabel,
+                symbol: defi.symbol,
+                balance: defi.balance,
+                balanceFormatted: defi.balanceFormatted,
+                balanceUSD: Number(defi.balanceUSD),
+                price: defi.price ? Number(defi.price) : null,
+                metaType: defi.metaType,
+                apy: defi.apy ? Number(defi.apy) : null,
+                apr: defi.apr ? Number(defi.apr) : null,
+                yieldEarnedUsd: defi.yieldEarnedUsd ? Number(defi.yieldEarnedUsd) : null,
+                dailyYield: defi.dailyYield ? Number(defi.dailyYield) : null,
+                supply: defi.supply ? Number(defi.supply) : null,
+                pricePerShare: defi.pricePerShare,
+                tokens: defi.tokens,
+                displayProps: defi.displayProps,
+                isActive: defi.isActive,
+                canWithdraw: defi.canWithdraw,
+                lockupEnd: defi.lockupEnd,
+                lastSyncAt: defi.lastSyncAt,
+              };
+
+              acc[appKey].positions.push(position);
+              acc[appKey].totalValueUsd += Number(defi.balanceUSD);
+              acc[appKey].positionCount += 1;
+
+              return acc;
+            },
+            {} as Record<string, any>
+          );
+
+          // Convert to array and sort by total value
+          return Object.values(appGroups).sort(
+            (a: any, b: any) => b.totalValueUsd - a.totalValueUsd
+          );
+        })(),
 
         walletData: walletData[0] || null,
 
@@ -817,8 +863,9 @@ export class CryptoService {
           orderBy: { balanceUsd: 'desc' },
         }),
         prisma.cryptoNFT.count({ where: { walletId: { in: walletIds } } }),
-        prisma.deFiPosition.findMany({
+        prisma.deFiAppPosition.findMany({
           where: { walletId: { in: walletIds }, isActive: true },
+          include: { app: true },
         }),
       ]);
 
@@ -855,10 +902,7 @@ export class CryptoService {
         (sum, asset) => sum + asset.balanceUsd,
         0
       );
-      const totalDeFiValue = defiPositions.reduce(
-        (sum, pos) => sum + pos.totalValueUsd.toNumber(),
-        0
-      );
+      const totalDeFiValue = defiPositions.reduce((sum, pos) => sum + Number(pos.balanceUSD), 0);
       const topAssets = Array.from(assetMap.values())
         .sort((a, b) => b.balanceUsd - a.balanceUsd)
         .slice(0, 10);
@@ -1097,30 +1141,50 @@ export class CryptoService {
         throw new CryptoServiceError('Wallet not found', CryptoErrorCodes.WALLET_NOT_FOUND, 404);
       }
 
-      // Build filter conditions
-      const where: any = { walletId };
+      // Import new service here to avoid circular dependencies
+      const { defiAppService } = await import('@/services/defiAppService');
 
-      if (filters.protocols?.length) where.protocolName = { in: filters.protocols };
-      if (filters.types?.length) where.positionType = { in: filters.types };
-      if (filters.networks?.length) where.network = { in: filters.networks };
-      if (filters.minValue) where.totalValueUsd = { gte: filters.minValue };
-      if (filters.isActive !== undefined) where.isActive = filters.isActive;
+      // Get data from new schema
+      const result = await defiAppService.getWalletDeFiData(userId, walletId);
 
-      // Get total count
-      const total = await prisma.deFiPosition.count({ where });
+      // Apply filters if needed
+      let filteredPositions = result.positions;
 
-      // Get positions
-      const positions = await prisma.deFiPosition.findMany({
-        where,
-        orderBy: { totalValueUsd: 'desc' },
-        skip: (pagination.page - 1) * pagination.limit,
-        take: pagination.limit,
-      });
+      if (filters.protocols?.length) {
+        filteredPositions = filteredPositions.filter(
+          (pos) =>
+            filters.protocols!.includes(pos.app.slug) ||
+            filters.protocols!.includes(pos.app.displayName)
+        );
+      }
 
+      if (filters.networks?.length) {
+        filteredPositions = filteredPositions.filter((pos) =>
+          filters.networks!.includes(pos.network)
+        );
+      }
+
+      if (filters.minValue) {
+        filteredPositions = filteredPositions.filter(
+          (pos) => Number(pos.balanceUSD) >= filters.minValue!
+        );
+      }
+
+      if (filters.isActive !== undefined) {
+        filteredPositions = filteredPositions.filter((pos) => pos.isActive === filters.isActive);
+      }
+
+      // Sort by balance USD descending
+      filteredPositions.sort((a, b) => Number(b.balanceUSD) - Number(a.balanceUSD));
+
+      // Apply pagination
+      const total = filteredPositions.length;
+      const skip = (pagination.page - 1) * pagination.limit;
+      const paginatedPositions = filteredPositions.slice(skip, skip + pagination.limit);
       const pages = Math.ceil(total / pagination.limit);
 
       return {
-        data: positions,
+        data: paginatedPositions,
         pagination: {
           page: pagination.page,
           limit: pagination.limit,
@@ -1953,27 +2017,69 @@ export class CryptoService {
     }
   ) {
     try {
-      // Import service here to avoid circular dependencies
-      const { defiPositionService } = await import('@/services/defiPositionService');
+      // Import new service here to avoid circular dependencies
+      const { defiAppService } = await import('@/services/defiAppService');
 
-      const positions = await defiPositionService.getWalletDeFiPositions(
-        userId,
-        walletId,
-        filters || {}
-      );
+      const result = await defiAppService.getWalletDeFiData(userId, walletId);
+
+      // Apply filters if provided
+      let filteredPositions = result.positions;
+
+      if (filters?.protocolName) {
+        filteredPositions = filteredPositions.filter(
+          (pos) =>
+            pos.app.slug === filters.protocolName || pos.app.displayName === filters.protocolName
+        );
+      }
+
+      if (filters?.positionType) {
+        filteredPositions = filteredPositions.filter(
+          (pos) => pos.positionType === filters.positionType
+        );
+      }
+
+      if (filters?.network) {
+        filteredPositions = filteredPositions.filter((pos) => pos.network === filters.network);
+      }
+
+      if (filters?.metaType) {
+        filteredPositions = filteredPositions.filter((pos) => pos.metaType === filters.metaType);
+      }
+
+      if (filters?.minValueUsd) {
+        filteredPositions = filteredPositions.filter(
+          (pos) => Number(pos.balanceUSD) >= filters.minValueUsd!
+        );
+      }
+
+      if (filters?.maxValueUsd) {
+        filteredPositions = filteredPositions.filter(
+          (pos) => Number(pos.balanceUSD) <= filters.maxValueUsd!
+        );
+      }
+
+      if (filters?.isActive !== undefined) {
+        filteredPositions = filteredPositions.filter((pos) => pos.isActive === filters.isActive);
+      }
 
       // Calculate summary metrics
       const summary = {
-        totalValueUsd: positions.reduce((sum, p) => sum + Number(p.totalValueUsd), 0),
-        totalYieldEarned: positions.reduce((sum, p) => sum + Number(p.yieldEarnedUsd || 0), 0),
-        activePositions: positions.filter((p) => p.isActive).length,
-        protocolCount: new Set(positions.map((p) => p.protocolName)).size,
-        positionsByType: this.groupBy(positions, 'positionType'),
-        positionsByProtocol: this.groupBy(positions, 'protocolName'),
+        totalValueUsd: filteredPositions.reduce((sum, p) => sum + Number(p.balanceUSD), 0),
+        totalYieldEarned: filteredPositions.reduce(
+          (sum, p) => sum + Number(p.yieldEarnedUsd || 0),
+          0
+        ),
+        activePositions: filteredPositions.filter((p) => p.isActive).length,
+        protocolCount: new Set(filteredPositions.map((p) => p.app.displayName)).size,
+        positionsByType: this.groupBy(filteredPositions, 'positionType'),
+        positionsByProtocol: this.groupBy(
+          filteredPositions.map((p) => ({ ...p, protocolName: p.app.displayName })),
+          'protocolName'
+        ),
       };
 
       return {
-        positions,
+        positions: filteredPositions,
         summary,
         filters,
       };
@@ -1992,10 +2098,10 @@ export class CryptoService {
    */
   async getDeFiAnalytics(userId: string, walletId: string) {
     try {
-      // Import service here to avoid circular dependencies
-      const { defiPositionService } = await import('@/services/defiPositionService');
+      // Import new service here to avoid circular dependencies
+      const { defiAppService } = await import('@/services/defiAppService');
 
-      return await defiPositionService.getDeFiAnalytics(userId, walletId);
+      return await defiAppService.getDeFiAnalytics(userId, walletId);
     } catch (error) {
       logger.error('Error fetching DeFi analytics:', error);
       throw new CryptoServiceError(
@@ -2019,11 +2125,38 @@ export class CryptoService {
     }
   ) {
     try {
-      // Import service here to avoid circular dependencies
-      const { defiPositionService } = await import('@/services/defiPositionService');
+      // Verify position ownership first
+      const position = await prisma.deFiAppPosition.findFirst({
+        where: {
+          id: positionId,
+          wallet: { userId },
+        },
+      });
 
-      return await defiPositionService.updatePositionMetrics(userId, positionId, updates);
+      if (!position) {
+        throw new CryptoServiceError('Position not found', CryptoErrorCodes.FETCH_FAILED, 404);
+      }
+
+      // Update the position
+      const updatedPosition = await prisma.deFiAppPosition.update({
+        where: { id: positionId },
+        data: {
+          ...updates,
+          updatedAt: new Date(),
+        },
+        include: { app: true },
+      });
+
+      logger.info('DeFi position metrics updated', {
+        userId,
+        positionId,
+        updates,
+      });
+
+      return updatedPosition;
     } catch (error) {
+      if (error instanceof CryptoServiceError) throw error;
+
       logger.error('Error updating DeFi position metrics:', error);
       throw new CryptoServiceError(
         'Failed to update position metrics',

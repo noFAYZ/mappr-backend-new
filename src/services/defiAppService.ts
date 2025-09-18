@@ -603,7 +603,10 @@ export class DeFiAppService {
     return network;
   }
 
-  private formatBalance(balance: string | number | null | undefined, decimals: number | null | undefined): string {
+  private formatBalance(
+    balance: string | number | null | undefined,
+    decimals: number | null | undefined
+  ): string {
     if (!balance || balance === null || balance === undefined) {
       return '0';
     }

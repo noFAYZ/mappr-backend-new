@@ -2,6 +2,7 @@ import { PlanType } from '@prisma/client';
 
 export interface PlanFeatures {
   maxAccounts: number;
+  maxWallets: number;
   maxTransactions: number;
   maxCategories: number;
   maxBudgets: number;
@@ -42,6 +43,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     yearlyDiscount: 0,
     features: {
       maxAccounts: 2,
+      maxWallets: 3,
       maxTransactions: 100,
       maxCategories: 10,
       maxBudgets: 3,
@@ -70,7 +72,8 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     yearlyDiscount: 17, // ~17% discount
     popular: true,
     features: {
-      maxAccounts: 10,
+      maxAccounts: 5,
+      maxWallets: 5,
       maxTransactions: 5000,
       maxCategories: 50,
       maxBudgets: 20,
@@ -99,6 +102,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     yearlyDiscount: 17, // ~17% discount
     features: {
       maxAccounts: -1, // unlimited
+      maxWallets: -1, // unlimited
       maxTransactions: -1, // unlimited
       maxCategories: -1, // unlimited
       maxBudgets: -1, // unlimited

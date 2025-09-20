@@ -149,7 +149,7 @@ export const apiRateLimit = createAdvancedRateLimit({
 });
 
 // Slow down middleware for gradual degradation
-export const slowDownMiddleware = slowDown({
+export const slowDownMiddleware: any = slowDown({
   windowMs: 15 * 60 * 1000, // 15 minutes
   delayAfter: 100, // Allow 100 requests at full speed
   delayMs: 500, // Add 500ms delay after delayAfter is reached
@@ -180,7 +180,6 @@ export const requestSizeLimit = (maxSizeBytes: number) => {
     return next();
   };
 };
-
 
 // IP whitelist/blacklist middleware
 export const ipFilter = (options: {

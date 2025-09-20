@@ -193,6 +193,7 @@ model Plan {
   yearlyPrice      Decimal        @db.Decimal(8, 2)
   isActive         Boolean        @default(true)
   maxAccounts      Int            @default(1)
+  maxWallets       Int            @default(3)
   maxTransactions  Int            @default(100)
   maxCategories    Int            @default(10)
   maxBudgets       Int            @default(3)

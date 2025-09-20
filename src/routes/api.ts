@@ -7,6 +7,7 @@ import {
 } from '@/middleware/auth';
 import { prisma } from '@/config/database';
 import { logger } from '@/utils/logger';
+import { planLimitsService } from '@/services/planLimitsService';
 import { z } from 'zod';
 
 const router = Router();
@@ -443,6 +444,87 @@ router.get('/admin/users/:userId', requireAdmin, async (req, res) => {
     res.status(500).json({
       error: 'SERVER_ERROR',
       message: 'Failed to fetch user details',
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/limits:
+ *   get:
+ *     summary: Get user plan limits overview
+ *     description: Retrieve current usage and limits for the authenticated user based on their plan
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User limits overview retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     planType:
+ *                       type: string
+ *                       enum: [FREE, PRO, ULTIMATE]
+ *                       example: "FREE"
+ *                     limits:
+ *                       type: object
+ *                       properties:
+ *                         wallets:
+ *                           type: object
+ *                           properties:
+ *                             current:
+ *                               type: integer
+ *                               example: 2
+ *                             limit:
+ *                               type: integer
+ *                               example: 3
+ *                             remaining:
+ *                               type: integer
+ *                               example: 1
+ *                             percentage:
+ *                               type: integer
+ *                               example: 67
+ *                         accounts:
+ *                           type: object
+ *                           properties:
+ *                             current:
+ *                               type: integer
+ *                               example: 1
+ *                             limit:
+ *                               type: integer
+ *                               example: 2
+ *                             remaining:
+ *                               type: integer
+ *                               example: 1
+ *                             percentage:
+ *                               type: integer
+ *                               example: 50
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/limits', requireAuth, async (req, res) => {
+  try {
+    const user = assertAuthenticatedUser(req);
+    const limitsOverview = await planLimitsService.getUserLimitsOverview(user.id);
+
+    res.json({
+      success: true,
+      data: limitsOverview,
+    });
+  } catch (error: any) {
+    logger.error('Limits fetch error:', error);
+    res.status(500).json({
+      error: 'SERVER_ERROR',
+      message: 'Failed to fetch user limits',
     });
   }
 });

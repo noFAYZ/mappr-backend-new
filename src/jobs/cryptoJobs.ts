@@ -771,7 +771,7 @@ export class CryptoJobProcessor {
               // Log insights using new schema data
               if (newAnalytics.claimableRewards.length > 0) {
                 const totalClaimable = newAnalytics.claimableRewards.reduce(
-                  (sum, reward) => sum + reward.amountUsd,
+                  (sum: number, reward: any) => sum + reward.amountUsd,
                   0
                 );
                 console.log(
@@ -783,7 +783,7 @@ export class CryptoJobProcessor {
 
               if (newAnalytics.lpPositions.length > 0) {
                 const totalLPValue = newAnalytics.lpPositions.reduce(
-                  (sum, lp) => sum + lp.totalValueUsd,
+                  (sum: number, lp: any) => sum + lp.totalValueUsd,
                   0
                 );
                 console.log(

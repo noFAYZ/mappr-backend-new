@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { cryptoController } from '@/controllers/cryptoController';
 import { authenticate } from '@/middleware/auth';
 import { validate } from '@/middleware/validate';
+import { enforceWalletLimit } from '@/middleware/planLimits';
 import {
   CreateWalletRequestSchema,
   UpdateWalletRequestSchema,
@@ -155,6 +156,7 @@ router.get('/wallets', cryptoController.getUserWallets.bind(cryptoController));
 router.post(
   '/wallets',
   writeOperationsRateLimit,
+  enforceWalletLimit,
   validate(CreateWalletRequestSchema),
   cryptoController.addWallet.bind(cryptoController)
 );
